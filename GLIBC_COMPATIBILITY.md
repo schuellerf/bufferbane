@@ -31,14 +31,18 @@ This will:
 
 ### On Fedora (your build machine):
 
+**Recommended: Use rustup** (gives you all targets)
+
 ```bash
-# Option A: Install rustup for musl support
+# Install rustup (official Rust toolchain manager)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
+
+# Add musl target
 rustup target add x86_64-unknown-linux-musl
 
-# Option B: Use musl-gcc (if system Rust)
-sudo dnf install musl-gcc musl-devel
+# Install musl-gcc (linker)
+sudo dnf install -y musl-gcc musl-devel musl-libc-static
 
 # Build static binary
 make build-server-static
@@ -48,6 +52,8 @@ cargo build --release --target x86_64-unknown-linux-musl -p bufferbane-server
 
 # Result: target/x86_64-unknown-linux-musl/release/bufferbane-server
 ```
+
+**Why rustup?** Fedora's system Rust doesn't include musl standard library. Rustup gives you all targets.
 
 ### Deploy the static binary:
 

@@ -99,7 +99,7 @@ cp client.conf.template client.conf
 # Add/update server section
 sed -i "s/host = \".*\"/host = \"$SERVER_HOST\"/" client.conf
 sed -i "s/port = .*/port = $SERVER_PORT/" client.conf
-sed -i "s/client_id = .*/client_id = $CLIENT_ID/" client.conf
+sed -i "s/client_id = \".*\"/client_id = \"$CLIENT_ID\"/" client.conf
 sed -i "/\[server\]/,/^\[/ s/shared_secret = \".*\"/shared_secret = \"$SHARED_SECRET\"/" client.conf
 
 # Make sure server is enabled
@@ -111,21 +111,29 @@ echo ""
 # Build server
 echo -e "${YELLOW}Step 4: Build Server Binary${NC}"
 
-# Check if musl target is available for maximum compatibility
-if rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then
+# Check for rustup and musl target
+if command -v rustup &> /dev/null; then
+    if ! rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then
+        echo "Installing musl target for static builds..."
+        rustup target add x86_64-unknown-linux-musl
+    fi
     echo "Building bufferbane-server with musl (fully static, works on any Linux)..."
     cargo build --release --target x86_64-unknown-linux-musl -p bufferbane-server
     SERVER_BINARY="target/x86_64-unknown-linux-musl/release/bufferbane-server"
     echo "✓ Server binary built (static musl): $SERVER_BINARY"
-elif command -v rustup &> /dev/null; then
-    echo "Installing musl target for maximum compatibility..."
-    rustup target add x86_64-unknown-linux-musl
+    echo "  This binary works on any Linux (no GLIBC dependency)"
+elif command -v musl-gcc &> /dev/null; then
+    echo "Warning: rustup not found, using musl-gcc..."
+    echo "Building bufferbane-server with musl..."
     cargo build --release --target x86_64-unknown-linux-musl -p bufferbane-server
     SERVER_BINARY="target/x86_64-unknown-linux-musl/release/bufferbane-server"
     echo "✓ Server binary built (static musl): $SERVER_BINARY"
 else
-    echo "Warning: Building with default target (may have GLIBC compatibility issues)"
-    echo "For maximum compatibility, install rustup and use musl target"
+    echo "Warning: Neither rustup nor musl-gcc found - building with default target"
+    echo "This may cause GLIBC compatibility issues on older systems."
+    echo "To fix, install rustup:"
+    echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+    echo ""
     cargo build --release -p bufferbane-server
     SERVER_BINARY="target/release/bufferbane-server"
     echo "✓ Server binary built: $SERVER_BINARY"

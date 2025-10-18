@@ -47,14 +47,27 @@ build-server:
 # Build server with musl (fully static, works on any Linux)
 build-server-static:
 	@echo "Building Bufferbane server with musl (static binary)..."
-	@if ! rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then \
-		echo "Installing musl target..."; \
-		rustup target add x86_64-unknown-linux-musl || \
-		(echo "Error: rustup not available. Install with: sudo dnf install rust-std-static-x86_64-unknown-linux-musl" && exit 1); \
+	@# Check rustup and musl target
+	@if command -v rustup >/dev/null 2>&1; then \
+		if ! rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then \
+			echo "Installing musl target..."; \
+			rustup target add x86_64-unknown-linux-musl; \
+		fi; \
+	else \
+		echo "Warning: rustup not found. Install with:"; \
+		echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"; \
+		echo ""; \
+		if ! command -v musl-gcc >/dev/null 2>&1; then \
+			echo "Error: musl-gcc also not found. Install with:"; \
+			echo "  sudo dnf install -y musl-gcc musl-devel musl-libc-static"; \
+			exit 1; \
+		fi; \
 	fi
+	@# Build with musl target
 	cargo build $(RELEASE_FLAGS) --target x86_64-unknown-linux-musl -p bufferbane-server
-	@echo "Build complete: target/x86_64-unknown-linux-musl/release/bufferbane-server"
-	@echo "This binary works on any Linux (no GLIBC version dependency)"
+	@echo "✓ Build complete: target/x86_64-unknown-linux-musl/release/bufferbane-server"
+	@echo "✓ This binary works on any Linux (no GLIBC version dependency)"
+	@ls -lh target/x86_64-unknown-linux-musl/release/bufferbane-server
 
 # Run tests
 test:

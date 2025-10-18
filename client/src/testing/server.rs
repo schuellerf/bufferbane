@@ -15,7 +15,7 @@ use protocol::{
         PacketHeader, PacketType,
     },
 };
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, info, warn};
@@ -44,11 +44,13 @@ impl ServerTester {
         let shared_secret = crypto::parse_shared_secret(&config.shared_secret)
             .map_err(|e| anyhow::anyhow!("Invalid shared secret: {}", e))?;
         
-        // Resolve server address
-        let server_addr = format!("{}:{}", config.host, config.port);
-        let server_addr: SocketAddr = server_addr
-            .parse()
-            .with_context(|| format!("Failed to parse server address: {}", server_addr))?;
+        // Resolve server address (supports both IP and hostname)
+        let server_addr_str = format!("{}:{}", config.host, config.port);
+        let server_addr: SocketAddr = server_addr_str
+            .to_socket_addrs()
+            .with_context(|| format!("Failed to resolve server address: {}", server_addr_str))?
+            .next()
+            .with_context(|| format!("No IP address found for: {}", server_addr_str))?;
         
         // Create UDP socket
         let socket = UdpSocket::bind("0.0.0.0:0")
