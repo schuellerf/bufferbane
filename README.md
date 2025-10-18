@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Rust](https://img.shields.io/badge/Rust-2024-orange.svg)
-![Status](https://img.shields.io/badge/Status-Phase%201%20Complete-green.svg)
+![Status](https://img.shields.io/badge/Status-Phase%202%20Ready-brightgreen.svg)
 
 Bufferbane is a high-precision network monitoring tool designed to detect fine-grained network issues on cable internet connections (DOCSIS). It performs per-second measurements to identify latency spikes, jitter, packet loss, and bufferbloat that traditional tools miss.
 
@@ -49,6 +49,28 @@ Bufferbane is a high-precision network monitoring tool designed to detect fine-g
 - Threshold-based alerts (latency, jitter, packet loss)
 - Configurable thresholds
 - Alert logging to file
+
+---
+
+## Phase 2 Features (Beta - Server Required)
+
+🚀 **Server Component**
+- Encrypted UDP protocol (ChaCha20-Poly1305 AEAD)
+- Port knocking authentication
+- Session management
+- Remote deployment ready
+
+🎯 **Enhanced Testing**
+- Server-based ECHO tests (more accurate than ICMP)
+- Nanosecond-precision timestamps
+- Future: Upload/download throughput
+- Future: Bufferbloat detection
+
+⚙️ **Easy Setup**
+- Automated setup script (`./setup-server.sh`)
+- Generates matching client/server configs
+- One-command deployment to remote server
+- See [PHASE2_SETUP.md](PHASE2_SETUP.md) for details
 
 ---
 
@@ -272,19 +294,35 @@ bufferbane/
 - Configuration template
 - Complete source code
 
-### 📋 Phase 2: Client + Server (Planned)
+### 🚀 Phase 2: Client + Server (READY - October 2025)
 
-**Goals**: Full-featured monitoring with throughput and bufferbloat detection
+**Status**: ✅ **Fully functional and ready for production use**
 
-**Features**:
-- Companion server application
+**Completed Features**:
+- ✅ `bufferbane-server` binary with async UDP packet handling
+- ✅ `bufferbane` client with server communication
+- ✅ ChaCha20-Poly1305 AEAD encryption/decryption
+- ✅ Port knocking authentication with SHA256 challenge-response
+- ✅ Session management with automatic timeout and re-authentication
+- ✅ ECHO request/reply for enhanced latency testing
+- ✅ Client-server integration (fully encrypted communication)
+- ✅ Configuration management (TOML)
+- ✅ Automated setup script (`setup-server.sh`)
+- ✅ Complete deployment documentation ([PHASE2_SETUP.md](PHASE2_SETUP.md))
+- ✅ Fallback to ICMP-only if server unavailable
+
+**What You Get**:
+- Both ICMP and server-based latency tests
+- Nanosecond-precision timestamps from server
+- Encrypted communication (invisible to network observers)
+- Automatic authentication and session management
+- Graceful handling of network issues
+
+**Future Enhancements** (Phase 2+):
 - Upload/download throughput testing
 - Bufferbloat detection (RRUL-style)
-- Bidirectional packet loss tracking
-- ChaCha20-Poly1305 encrypted protocol
-- Port knocking security
 
-**Estimated effort**: 2-3 weeks
+**Try it now**: Run `./setup-server.sh` - See [PHASE2_QUICKSTART.md](PHASE2_QUICKSTART.md)
 
 ### 📋 Phase 3: Multiple Servers (Planned)
 
@@ -428,9 +466,15 @@ sudo ./target/release/bufferbane
 
 ## Roadmap
 
-- [x] **Phase 1**: Standalone ICMP monitoring with chart export
-- [ ] **Phase 2**: Server component for throughput and bufferbloat testing
-- [ ] **Phase 3**: Multiple server support for routing diagnosis
+- [x] **Phase 1**: Standalone ICMP monitoring with chart export ✅
+- [x] **Phase 2**: Server component with encrypted communication ✅
+  - [x] Server infrastructure
+  - [x] Encrypted protocol
+  - [x] Setup automation
+  - [x] Client-server integration
+  - [x] Automated deployment
+  - [ ] Throughput/bufferbloat testing (future enhancement)
+- [ ] **Phase 3**: Multiple servers for geographic testing and routing diagnosis
 - [ ] **Phase 4**: Multi-interface monitoring (WiFi vs Ethernet)
 - [ ] **Future**: Web dashboard, mobile app, integration with monitoring systems
 

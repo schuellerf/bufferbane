@@ -2,9 +2,11 @@
 
 mod icmp;
 mod measurement;
+pub mod server;
 
 pub use icmp::IcmpTester;
 pub use measurement::Measurement;
+pub use server::ServerTester;
 
 use crate::config::Config;
 use anyhow::Result;

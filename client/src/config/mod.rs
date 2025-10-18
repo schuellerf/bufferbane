@@ -8,11 +8,35 @@ use std::path::Path;
 pub struct Config {
     pub general: GeneralConfig,
     pub targets: TargetsConfig,
+    #[serde(default)]
+    pub server: Option<ServerConfig>,
     pub alerts: AlertsConfig,
     pub retention: RetentionConfig,
     pub output: OutputConfig,
     pub export: ExportConfig,
     pub logging: LoggingConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ServerConfig {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+    pub shared_secret: String,
+    #[serde(default)]
+    pub client_id: u64,
+    #[serde(default = "default_knock_retry_attempts")]
+    pub knock_retry_attempts: u32,
+    #[serde(default = "default_knock_timeout_ms")]
+    pub knock_timeout_ms: u64,
+    #[serde(default = "default_true")]
+    pub enable_echo_test: bool,
+    #[serde(default)]
+    pub enable_throughput_test: bool,
+    #[serde(default)]
+    pub enable_download_test: bool,
+    #[serde(default)]
+    pub enable_bufferbloat_test: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -81,6 +105,18 @@ pub struct LoggingConfig {
 
 fn default_connection_type() -> String {
     "auto".to_string()
+}
+
+fn default_knock_retry_attempts() -> u32 {
+    3
+}
+
+fn default_knock_timeout_ms() -> u64 {
+    2000
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Config {

@@ -19,7 +19,7 @@ INSTALL_GROUP ?= $(shell id -gn $(INSTALL_USER))
 # Detect home directory for user
 USER_HOME = $(shell getent passwd $(INSTALL_USER) | cut -d: -f6)
 
-.PHONY: all build build-client build-server test clean clean-data install uninstall install-service uninstall-service windows windows-setup help
+.PHONY: all build build-client build-server build-server-static test clean clean-data install uninstall install-service uninstall-service windows windows-setup help
 
 # Default target
 all: build
@@ -43,6 +43,18 @@ build-server:
 	@echo "Building Bufferbane server (release mode)..."
 	cargo build $(RELEASE_FLAGS) -p bufferbane-server
 	@echo "Build complete: $(BUILD_DIR)/bufferbane-server"
+
+# Build server with musl (fully static, works on any Linux)
+build-server-static:
+	@echo "Building Bufferbane server with musl (static binary)..."
+	@if ! rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then \
+		echo "Installing musl target..."; \
+		rustup target add x86_64-unknown-linux-musl || \
+		(echo "Error: rustup not available. Install with: sudo dnf install rust-std-static-x86_64-unknown-linux-musl" && exit 1); \
+	fi
+	cargo build $(RELEASE_FLAGS) --target x86_64-unknown-linux-musl -p bufferbane-server
+	@echo "Build complete: target/x86_64-unknown-linux-musl/release/bufferbane-server"
+	@echo "This binary works on any Linux (no GLIBC version dependency)"
 
 # Run tests
 test:
@@ -223,6 +235,7 @@ help:
 	@echo "  make build              Build client and server (release mode)"
 	@echo "  make build-client       Build only the client"
 	@echo "  make build-server       Build only the server (Phase 2)"
+	@echo "  make build-server-static Build server with musl (works on any Linux)"
 	@echo "  make test               Run tests"
 	@echo "  make clean              Clean build artifacts"
 	@echo "  make clean-data         Clean generated data (db, charts, exports, logs)"

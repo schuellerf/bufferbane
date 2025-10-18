@@ -12,7 +12,7 @@ mod charts;
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 
 #[derive(Parser, Debug)]
 #[command(name = "bufferbane")]
@@ -113,8 +113,45 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     
     // Initialize ICMP tester
     let config_arc = std::sync::Arc::new(config.clone());
-    let tester = testing::IcmpTester::new(config_arc)?;
+    let tester = testing::IcmpTester::new(config_arc.clone())?;
     info!("ICMP tester initialized");
+    
+    // Initialize server tester (Phase 2) if enabled
+    let server_tester = if let Some(ref server_config) = config.server {
+        if server_config.enabled {
+            let server_config_arc = std::sync::Arc::new(server_config.clone());
+            match testing::ServerTester::new(
+                server_config_arc,
+                config.general.interfaces.first().cloned().unwrap_or_else(|| "default".to_string()),
+                config.general.connection_type.clone(),
+            ) {
+                Ok(mut st) => {
+                    // Authenticate with server
+                    match st.authenticate() {
+                        Ok(_) => {
+                            info!("Server tester initialized and authenticated");
+                            Some(st)
+                        }
+                        Err(e) => {
+                            error!("Failed to authenticate with server: {}", e);
+                            warn!("Continuing with ICMP-only mode");
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to initialize server tester: {}", e);
+                    warn!("Continuing with ICMP-only mode");
+                    None
+                }
+            }
+        } else {
+            info!("Server testing disabled in configuration");
+            None
+        }
+    } else {
+        None
+    };
     
     // Initialize output
     let output_handle = output::OutputManager::new(config.clone());
@@ -133,44 +170,72 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     let mut hourly_stats = HourlyStats::new();
     let mut last_stats_log = chrono::Local::now();
     
+    // Make server_tester mutable for running tests
+    let mut server_tester = server_tester;
+    
     loop {
         interval.tick().await;
         
-        // Run tests
+        let mut all_measurements = Vec::new();
+        
+        // Run ICMP tests
         match tester.run_tests().await {
             Ok(measurements) => {
-                // Store measurements
-                for measurement in &measurements {
-                    if let Err(e) = db.store_measurement(measurement) {
-                        error!("Failed to store measurement: {}", e);
-                    }
+                all_measurements.extend(measurements);
+            }
+            Err(e) => {
+                error!("ICMP test failed: {}", e);
+            }
+        }
+        
+        // Run server tests (Phase 2) if available
+        if let Some(ref mut st) = server_tester {
+            match st.run_test() {
+                Ok(measurements) => {
+                    all_measurements.extend(measurements);
                 }
-                
-                // Check for alerts
-                if let Err(e) = alert_manager.check_measurements(&measurements) {
-                    error!("Alert check failed: {}", e);
-                }
-                
-                // Update output or statistics
-                if quiet {
-                    // Quiet mode: accumulate stats
-                    hourly_stats.add_measurements(&measurements);
-                    
-                    // Log hourly statistics
-                    let now = chrono::Local::now();
-                    if now.signed_duration_since(last_stats_log).num_minutes() >= 60 {
-                        hourly_stats.log_and_reset();
-                        last_stats_log = now;
-                    }
-                } else {
-                    // Normal mode: show every measurement
-                    if let Err(e) = output_handle.update(&measurements) {
-                        error!("Output update failed: {}", e);
+                Err(e) => {
+                    error!("Server test failed: {}", e);
+                    // Try to re-authenticate on next iteration
+                    if let Err(auth_err) = st.authenticate() {
+                        error!("Re-authentication failed: {}", auth_err);
+                        // Disable server testing for this session
+                        server_tester = None;
+                        warn!("Server testing disabled due to authentication failure");
                     }
                 }
             }
-            Err(e) => {
-                error!("Test failed: {}", e);
+        }
+        
+        if !all_measurements.is_empty() {
+            // Store measurements
+            for measurement in &all_measurements {
+                if let Err(e) = db.store_measurement(measurement) {
+                    error!("Failed to store measurement: {}", e);
+                }
+            }
+            
+            // Check for alerts
+            if let Err(e) = alert_manager.check_measurements(&all_measurements) {
+                error!("Alert check failed: {}", e);
+            }
+            
+            // Update output or statistics
+            if quiet {
+                // Quiet mode: accumulate stats
+                hourly_stats.add_measurements(&all_measurements);
+                
+                // Log hourly statistics
+                let now = chrono::Local::now();
+                if now.signed_duration_since(last_stats_log).num_minutes() >= 60 {
+                    hourly_stats.log_and_reset();
+                    last_stats_log = now;
+                }
+            } else {
+                // Normal mode: show every measurement
+                if let Err(e) = output_handle.update(&all_measurements) {
+                    error!("Output update failed: {}", e);
+                }
             }
         }
     }
