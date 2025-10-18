@@ -40,8 +40,8 @@ impl AlertManager {
                         "high_latency",
                         &m.target,
                         "warning",
-                        &format!("RTT {:.2}ms exceeds threshold {:.2}ms", 
-                                rtt, self.config.alerts.latency_threshold_ms),
+                        &format!("{} RTT {:.2}ms exceeds threshold {:.2}ms", 
+                                m.target, rtt, self.config.alerts.latency_threshold_ms),
                         Some(rtt),
                         Some(self.config.alerts.latency_threshold_ms),
                     );
@@ -61,8 +61,8 @@ impl AlertManager {
                         "high_latency",
                         &m.target,
                         "warning",
-                        &format!("Upload latency {:.2}ms exceeds threshold {:.2}ms", 
-                                upload, self.config.alerts.latency_threshold_ms),
+                        &format!("{} Upload {:.2}ms exceeds threshold {:.2}ms", 
+                                m.target, upload, self.config.alerts.latency_threshold_ms),
                         Some(upload),
                         Some(self.config.alerts.latency_threshold_ms),
                     );
@@ -82,8 +82,8 @@ impl AlertManager {
                         "high_latency",
                         &m.target,
                         "warning",
-                        &format!("Download latency {:.2}ms exceeds threshold {:.2}ms", 
-                                download, self.config.alerts.latency_threshold_ms),
+                        &format!("{} Download {:.2}ms exceeds threshold {:.2}ms", 
+                                m.target, download, self.config.alerts.latency_threshold_ms),
                         Some(download),
                         Some(self.config.alerts.latency_threshold_ms),
                     );
@@ -99,7 +99,7 @@ impl AlertManager {
                     "packet_loss",
                     &m.target,
                     "warning",
-                    "Packet loss detected (timeout)",
+                    &format!("{} Packet loss (timeout)", m.target),
                     None,
                     None,
                 );

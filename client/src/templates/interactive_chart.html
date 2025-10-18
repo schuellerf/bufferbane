@@ -32,7 +32,7 @@
             cursor: crosshair;
         }
         #tooltip {
-            position: absolute;
+            position: fixed;
             background: rgba(0, 0, 0, 0.9);
             color: white;
             padding: 12px 16px;
@@ -567,8 +567,8 @@
                 
                 tooltip.innerHTML = tooltipHtml;
                 tooltip.style.display = 'block';
-                tooltip.style.left = (e.clientX + 15) + 'px';
-                tooltip.style.top = (e.clientY - 15) + 'px';
+                tooltip.style.left = (e.clientX + 10) + 'px';
+                tooltip.style.top = (e.clientY + 10) + 'px';
             } else {
                 tooltip.style.display = 'none';
             }
