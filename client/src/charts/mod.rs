@@ -589,68 +589,108 @@ pub fn generate_interactive_chart(
             // Data format: [window_start, window_end, count, min, max, avg, p95, p99]
             const MAX_GAP_SECONDS = 300;  // 5 minutes
             Object.entries(data).forEach(([target, windows], idx) => {{
-                // Draw avg line (bold, primary)
-                ctx.strokeStyle = colors[idx];
-                ctx.lineWidth = 3;
-                ctx.beginPath();
+                // Split windows into continuous segments (no gaps > 5 min)
+                const segments = [];
+                let currentSegment = [];
                 
                 windows.forEach((window, i) => {{
-                    const window_center = (window[0] + window[1]) / 2;
-                    const avg = window[5];  // avg is at index 5
-                    const x = timeToX(window_center);
-                    const y = rttToY(avg);
-                    
                     if (i === 0) {{
-                        ctx.moveTo(x, y);
+                        currentSegment.push(window);
                     }} else {{
-                        // Check if there's a gap > 5 minutes between windows
                         const prevTime = windows[i - 1][1];  // prev window end
                         const currTime = window[0];  // curr window start
                         const gap = currTime - prevTime;
                         
                         if (gap > MAX_GAP_SECONDS) {{
-                            // Start a new line segment (don't connect across gap)
-                            ctx.stroke();
-                            ctx.beginPath();
-                            ctx.moveTo(x, y);
+                            // Gap detected - save current segment and start new one
+                            if (currentSegment.length > 0) {{
+                                segments.push(currentSegment);
+                            }}
+                            currentSegment = [window];
                         }} else {{
-                            ctx.lineTo(x, y);
+                            currentSegment.push(window);
                         }}
                     }}
                 }});
                 
-                ctx.stroke();
+                // Don't forget the last segment
+                if (currentSegment.length > 0) {{
+                    segments.push(currentSegment);
+                }}
                 
-                // Draw min/max lines (thin, lighter color)
-                ctx.strokeStyle = colors[idx];
-                ctx.globalAlpha = 0.3;
-                ctx.lineWidth = 1;
-                
-                // Min line
-                ctx.beginPath();
-                windows.forEach((window, i) => {{
-                    const window_center = (window[0] + window[1]) / 2;
-                    const min = window[3];
-                    const x = timeToX(window_center);
-                    const y = rttToY(min);
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
+                // Draw each segment separately
+                segments.forEach(segment => {{
+                    // Draw shaded area between min and max
+                    ctx.fillStyle = colors[idx];
+                    ctx.globalAlpha = 0.1;
+                    ctx.beginPath();
+                    
+                    // Draw min line (bottom of shaded area)
+                    segment.forEach((window, i) => {{
+                        const window_center = (window[0] + window[1]) / 2;
+                        const min = window[3];
+                        const x = timeToX(window_center);
+                        const y = rttToY(min);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }});
+                    
+                    // Draw max line in reverse (top of shaded area)
+                    for (let i = segment.length - 1; i >= 0; i--) {{
+                        const window = segment[i];
+                        const window_center = (window[0] + window[1]) / 2;
+                        const max = window[4];
+                        const x = timeToX(window_center);
+                        const y = rttToY(max);
+                        ctx.lineTo(x, y);
+                    }}
+                    
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Draw min line (thin, lighter color)
+                    ctx.strokeStyle = colors[idx];
+                    ctx.globalAlpha = 0.3;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    segment.forEach((window, i) => {{
+                        const window_center = (window[0] + window[1]) / 2;
+                        const min = window[3];
+                        const x = timeToX(window_center);
+                        const y = rttToY(min);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }});
+                    ctx.stroke();
+                    
+                    // Draw max line (thin, lighter color)
+                    ctx.beginPath();
+                    segment.forEach((window, i) => {{
+                        const window_center = (window[0] + window[1]) / 2;
+                        const max = window[4];
+                        const x = timeToX(window_center);
+                        const y = rttToY(max);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }});
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Draw avg line (bold, primary)
+                    ctx.strokeStyle = colors[idx];
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    segment.forEach((window, i) => {{
+                        const window_center = (window[0] + window[1]) / 2;
+                        const avg = window[5];
+                        const x = timeToX(window_center);
+                        const y = rttToY(avg);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }});
+                    ctx.stroke();
                 }});
-                ctx.stroke();
-                
-                // Max line
-                ctx.beginPath();
-                windows.forEach((window, i) => {{
-                    const window_center = (window[0] + window[1]) / 2;
-                    const max = window[4];
-                    const x = timeToX(window_center);
-                    const y = rttToY(max);
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }});
-                ctx.stroke();
-                
-                ctx.globalAlpha = 1.0;
             }});
         }}
         
