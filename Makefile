@@ -19,7 +19,7 @@ INSTALL_GROUP ?= $(shell id -gn $(INSTALL_USER))
 # Detect home directory for user
 USER_HOME = $(shell getent passwd $(INSTALL_USER) | cut -d: -f6)
 
-.PHONY: all build test clean install uninstall install-service uninstall-service help
+.PHONY: all build test clean clean-data install uninstall install-service uninstall-service windows windows-setup help
 
 # Default target
 all: build
@@ -39,6 +39,28 @@ test:
 clean:
 	@echo "Cleaning build artifacts..."
 	cargo clean
+
+# Clean generated data (database, charts, exports, logs)
+clean-data:
+	@echo "Cleaning generated data files..."
+	@echo "  Removing database files..."
+	@rm -f *.db *.db-shm *.db-wal bufferbane.db* 2>/dev/null || true
+	@echo "  Removing charts..."
+	@rm -f *.png *.html 2>/dev/null || true
+	@echo "  Removing exports..."
+	@rm -f *.csv *.json stats.json 2>/dev/null || true
+	@rm -rf exports/ 2>/dev/null || true
+	@echo "  Removing log files..."
+	@rm -f *.log 2>/dev/null || true
+	@echo "  Removing temporary files..."
+	@rm -f *.tmp *.temp 2>/dev/null || true
+	@echo ""
+	@echo "✓ Data cleaned. Source code, templates, and config preserved."
+	@echo ""
+	@echo "Note: This only cleans the current directory."
+	@echo "User data locations are not affected:"
+	@echo "  - ~/.local/share/bufferbane/"
+	@echo "  - /etc/bufferbane/"
 
 # Install binary and config template
 install: build
@@ -132,6 +154,46 @@ uninstall: uninstall-service
 	@echo "Note: Configuration in /etc/bufferbane/ was not removed."
 	@echo "To remove it: sudo rm -rf /etc/bufferbane/"
 
+# Cross-compile for Windows (requires mingw-w64)
+windows-setup:
+	@echo "Installing Windows cross-compilation prerequisites..."
+	@echo ""
+	@if command -v rustup >/dev/null 2>&1; then \
+		echo "  [rustup detected] Adding Rust target for Windows..."; \
+		rustup target add x86_64-pc-windows-gnu; \
+	elif [ -f /etc/fedora-release ] || [ -f /etc/redhat-release ]; then \
+		echo "  [Fedora/RHEL detected] Installing Rust Windows target via dnf..."; \
+		echo "  Run: sudo dnf install rust-std-static-x86_64-pc-windows-gnu"; \
+	elif [ -f /etc/debian_version ]; then \
+		echo "  [Debian/Ubuntu detected] Installing Rust Windows target..."; \
+		echo "  Run: sudo apt install rustc-targets-x86-64-pc-windows-gnu"; \
+	else \
+		echo "  Please install Rust Windows target manually for your system"; \
+	fi
+	@echo ""
+	@echo "You also need mingw-w64 cross-compiler. Install with:"
+	@echo "  Fedora: sudo dnf install mingw64-gcc mingw64-winpthreads-static"
+	@echo "  Ubuntu: sudo apt install mingw-w64"
+	@echo "  Arch:   sudo pacman -S mingw-w64-gcc"
+
+windows:
+	@echo "Cross-compiling Bufferbane for Windows..."
+	@echo "  Target: x86_64-pc-windows-gnu"
+	@echo ""
+	cargo build --release --target x86_64-pc-windows-gnu
+	@echo ""
+	@echo "Windows build complete!"
+	@echo "Binary: target/x86_64-pc-windows-gnu/release/bufferbane.exe"
+	@echo ""
+	@echo "Transfer to Windows and run (requires Administrator for ICMP):"
+	@echo "  bufferbane.exe --config client.conf"
+	@echo "  bufferbane.exe --chart --last 24h --output latency.png"
+	@echo ""
+	@echo "Note: Windows builds have limited functionality:"
+	@echo "  - ICMP requires Administrator privileges"
+	@echo "  - No systemd service support"
+	@echo "  - Chart export and database features work normally"
+
 # Show help
 help:
 	@echo "Bufferbane - Network Quality Monitoring"
@@ -140,10 +202,13 @@ help:
 	@echo "  make build              Build the project (release mode)"
 	@echo "  make test               Run tests"
 	@echo "  make clean              Clean build artifacts"
+	@echo "  make clean-data         Clean generated data (db, charts, exports, logs)"
 	@echo "  make install            Install binary and config template"
 	@echo "  make install-service    Install systemd service (requires root)"
 	@echo "  make uninstall-service  Uninstall systemd service (requires root)"
 	@echo "  make uninstall          Uninstall everything (requires root)"
+	@echo "  make windows-setup      Install Windows cross-compilation tools"
+	@echo "  make windows            Cross-compile for Windows (x64)"
 	@echo "  make help               Show this help message"
 	@echo ""
 	@echo "Quick installation:"

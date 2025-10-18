@@ -401,6 +401,88 @@ sudo make install-service
 
 ---
 
+## Cross-Compilation for Windows
+
+Bufferbane can be cross-compiled for Windows from Linux using MinGW-w64.
+
+### Prerequisites
+
+```bash
+# Step 1: Check what you need to install
+make windows-setup
+```
+
+This will detect your system and show the required packages. Then install them:
+
+**Fedora/RHEL/CentOS:**
+```bash
+sudo dnf install rust-std-static-x86_64-pc-windows-gnu mingw64-gcc mingw64-winpthreads-static
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt install mingw-w64
+# If using rustup:
+rustup target add x86_64-pc-windows-gnu
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S mingw-w64-gcc
+# If using rustup:
+rustup target add x86_64-pc-windows-gnu
+```
+
+### Build for Windows
+
+```bash
+# Cross-compile for Windows (x64)
+make windows
+```
+
+This produces: `target/x86_64-pc-windows-gnu/release/bufferbane.exe`
+
+### Windows Binary Usage
+
+Transfer the `.exe` file to Windows and run:
+
+```powershell
+# Show help
+bufferbane.exe --help
+
+# Monitor network (requires Administrator for ICMP)
+bufferbane.exe --config client.conf
+
+# Generate chart
+bufferbane.exe --chart --last 24h --output latency.png
+
+# Export data
+bufferbane.exe --export csv --last 7d --output data.csv
+```
+
+### Windows Limitations
+
+⚠️ **Known limitations on Windows:**
+
+- **ICMP requires Administrator privileges** - Run as Administrator or ICMP tests will fail
+- **No systemd support** - Must run manually or use Windows Task Scheduler
+- **Path separators** - Use Windows paths in config: `C:\Users\YourName\bufferbane.db`
+- **CAP_NET_RAW not available** - Administrator rights are mandatory for raw sockets
+
+### Windows Configuration
+
+Create `client.conf` with Windows paths:
+
+```toml
+[general]
+database_path = "C:\\Users\\YourName\\AppData\\Local\\bufferbane\\bufferbane.db"
+log_path = "C:\\Users\\YourName\\AppData\\Local\\bufferbane\\bufferbane.log"
+```
+
+**Tip**: Use double backslashes (`\\`) in TOML config files.
+
+---
+
 ## Verification
 
 After installation, verify everything works:
