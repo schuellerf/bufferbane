@@ -52,6 +52,10 @@ struct Args {
     #[arg(long)]
     interactive: bool,
     
+    /// Number of time segments for chart aggregation (default: 100)
+    #[arg(long, default_value = "100")]
+    segments: usize,
+    
     /// Quiet mode: Log hourly statistics instead of every ping (for systemd service)
     #[arg(short, long)]
     quiet: bool,
@@ -227,12 +231,13 @@ async fn run_chart(config: &config::Config, args: &Args) -> Result<()> {
     });
     
     // Generate chart with min/max/avg/percentile lines
+    info!("Using {} time segments for aggregation", args.segments);
     if args.interactive {
-        charts::generate_interactive_chart(&measurements, &output_path, config)?;
+        charts::generate_interactive_chart(&measurements, &output_path, config, args.segments)?;
         info!("Interactive chart saved to {:?}", output_path);
         info!("Open the file in your web browser to view the interactive chart");
     } else {
-        charts::generate_latency_chart(&measurements, &output_path, config)?;
+        charts::generate_latency_chart(&measurements, &output_path, config, args.segments)?;
         info!("Chart saved to {:?}", output_path);
     }
     

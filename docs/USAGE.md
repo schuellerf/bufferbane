@@ -205,6 +205,9 @@ Generate **static PNG** or **interactive HTML** charts:
   --start "2025-10-18 18:00" \
   --end "2025-10-18 22:00" \
   --output evening_problem.png
+
+# Custom aggregation (more detail with 200 segments instead of default 100)
+./target/release/bufferbane --chart --last 24h --segments 200 --output detailed.png
 ```
 
 **PNG Chart Features**:
@@ -231,6 +234,12 @@ Generate **static PNG** or **interactive HTML** charts:
   --start "2025-10-18 18:00" \
   --end "2025-10-18 22:00" \
   --output investigation.html
+
+# High detail for long time ranges (e.g., 7 days with 300 segments)
+./target/release/bufferbane --chart --interactive --last 7d --segments 300 --output week_detailed.html
+
+# Low detail for quick overview (50 segments)
+./target/release/bufferbane --chart --interactive --last 24h --segments 50 --output quick_overview.html
 ```
 
 **Interactive HTML Features**:

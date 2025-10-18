@@ -71,12 +71,32 @@ Output: `latency_YYYYMMDD_HHMMSS.html`
 
 ### 1. Hover Tooltips
 
-Hover over any data point to see:
+Hover over any data point to see comprehensive window statistics:
 - **Target**: Which server was pinged
-- **Time**: Full timestamp (date, time, seconds)
-- **Latency**: Exact RTT in milliseconds (2 decimal places)
+- **Time Window**: Start and end time of the aggregation window
+- **Sample Count**: Number of measurements in this window
+- **Latency Statistics**:
+  - **Min**: Lowest latency in window
+  - **Max**: Highest latency in window
+  - **Avg**: Average latency (mean)
+  - **P95**: 95th percentile (95% of measurements below this)
+  - **P99**: 99th percentile (99% of measurements below this)
+- **Variance**: Difference between max and min (shows stability)
 
 The tooltip follows your mouse and appears automatically within 20 pixels of a data point.
+
+**Example Tooltip**:
+```
+Target: dns.google
+Window: 14:00:00 - 14:14:24 (864 samples)
+─────────────────────────────
+Min:    8.23ms
+Avg:   10.45ms
+Max:   25.67ms
+P95:   15.34ms
+P99:   18.92ms
+Variance: 17.44ms
+```
 
 ### 2. Statistics Panel
 
@@ -106,6 +126,39 @@ These statistics are calculated client-side from the data.
   - Makes it obvious when monitoring wasn't running
   - Prevents misleading connections across downtime periods
   - Applies to both PNG and HTML charts
+
+### 5. Data Aggregation & Windowing
+
+To handle large datasets efficiently and reduce visual clutter, charts aggregate raw measurements into time windows:
+
+- **Segments**: Time range divided into windows (default: 100, configurable via `--segments`)
+- **Window size**: `(end_time - start_time) / segments`
+  - Example with 100 segments: 24 hours → ~14.4 minutes per window
+  - Example with 200 segments: 24 hours → ~7.2 minutes per window
+  - Example with 50 segments: 7 days → ~3.4 hours per window
+- **Per-window statistics**: min, max, avg, P95, P99
+- **Visual representation**:
+  - Each window plots 5 lines (min/max/avg/P95/P99)
+  - Shaded area between min/max shows variance
+  - Avg line is bold (primary metric)
+  
+**Why aggregate?**
+- 24-hour period = 86,400 measurements (at 1/sec)
+- Raw plotting: 86,400 points = cluttered, slow
+- Aggregated: 100 windows = clear trends, fast rendering
+- Statistics per window show data quality
+
+**Customizing segment count**:
+```bash
+# More detail (200 segments)
+bufferbane --chart --interactive --last 24h --segments 200 --output detailed.html
+
+# Less detail (50 segments) for long ranges
+bufferbane --chart --interactive --last 7d --segments 50 --output overview.html
+
+# Very high detail (500 segments) for short ranges
+bufferbane --chart --interactive --last 1h --segments 500 --output minute_detail.html
+```
 
 ---
 

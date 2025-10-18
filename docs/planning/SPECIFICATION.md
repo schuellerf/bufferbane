@@ -504,6 +504,9 @@ bufferbane export --format json --last 7d --output data.json
 ```bash
 # Generate basic latency chart (available in Phase 1)
 bufferbane chart --last 24h --output latency.png
+
+# Generate interactive HTML chart with detailed tooltips
+bufferbane chart --last 24h --interactive --output latency.html
 ```
 
 Single chart showing latency over time with statistical visualization:
@@ -513,7 +516,36 @@ Single chart showing latency over time with statistical visualization:
 - **P95/P99 lines**: 95th and 99th percentile (dashed lines)
 - **Shaded area**: Light fill between min and max (shows variance)
 - **Multiple targets**: Color-coded lines for each target
-- Export as PNG (1920x1080, configurable)
+- Export as PNG (1920x1080, configurable) or HTML (interactive)
+
+**Data Aggregation**:
+Charts aggregate raw measurements into time windows for clarity and performance:
+- **Default segments**: 100 (configurable via `--segments` flag)
+- **Window size**: `(time_range) / segments` (e.g., 24h / 100 = ~14.4 minutes per window)
+- **Custom segments**: `--segments 50` (less detail), `--segments 200` (more detail)
+- **Statistics per window**: min, max, avg, P95, P99
+- **Interactive tooltips**: Hover to see all statistics for each time window
+- **Benefits**: 
+  - Handles large datasets (3600+ measurements/hour)
+  - Reduces visual clutter
+  - Shows statistical trends clearly
+  - Flexible detail level for different use cases
+  - Enables meaningful zoom/pan (Phase 4)
+
+**Usage Examples**:
+```bash
+# Default (100 segments)
+bufferbane chart --last 24h --output latency.png
+
+# High detail (200 segments) for detailed analysis
+bufferbane chart --last 24h --segments 200 --output detailed.png
+
+# Low detail (50 segments) for quick overview
+bufferbane chart --last 7d --segments 50 --output overview.png
+
+# Very high detail (500 segments) for short time ranges
+bufferbane chart --last 1h --segments 500 --output minute_by_minute.png
+```
 
 **Example visual layout**:
 ```

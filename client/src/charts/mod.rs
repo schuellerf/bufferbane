@@ -12,6 +12,7 @@ pub fn generate_latency_chart(
     measurements: &[Measurement],
     output_path: &Path,
     config: &Config,
+    num_segments: usize,
 ) -> Result<()> {
     if measurements.is_empty() {
         anyhow::bail!("No measurements to chart");
@@ -108,7 +109,7 @@ pub fn generate_latency_chart(
         // Process each continuous segment separately
         for (segment_idx, segment) in segments.iter().enumerate() {
             // Calculate statistics for each window within this segment
-            let window_size = ((max_time - min_time) / 100).max(1);
+            let window_size = ((max_time - min_time) / num_segments as i64).max(1);
             let mut windowed_stats = Vec::new();
             
             for window_start in (min_time..=max_time).step_by(window_size as usize) {
@@ -273,6 +274,7 @@ pub fn generate_interactive_chart(
     measurements: &[Measurement],
     output_path: &Path,
     _config: &Config,
+    num_segments: usize,
 ) -> Result<()> {
     if measurements.is_empty() {
         anyhow::bail!("No measurements to chart");
@@ -300,30 +302,69 @@ pub fn generate_interactive_chart(
     let min_time = measurements.iter().map(|m| m.timestamp).min().unwrap();
     let max_time = measurements.iter().map(|m| m.timestamp).max().unwrap();
     
+    // Calculate windowing parameters
+    let window_size = ((max_time - min_time) / num_segments as i64).max(1);
+    
+    // Aggregate data into windows with statistics
+    let mut windowed_data: HashMap<String, Vec<(i64, i64, usize, Statistics)>> = HashMap::new();
+    
+    for (target, points) in &by_target {
+        let mut sorted_points = points.clone();
+        sorted_points.sort_by_key(|(t, _)| *t);
+        
+        let mut target_windows = Vec::new();
+        
+        // Split into segments and skip gaps > 5 minutes
+        let segments = split_into_segments(&sorted_points, 300);
+        
+        for segment in segments {
+            // Create windows within each segment
+            for window_start in (min_time..=max_time).step_by(window_size as usize) {
+                let window_end = window_start + window_size;
+                let window_points: Vec<f64> = segment
+                    .iter()
+                    .filter(|(t, _)| *t >= window_start && *t < window_end)
+                    .map(|(_, rtt)| *rtt)
+                    .collect();
+                
+                if !window_points.is_empty() {
+                    let stats = calculate_statistics(&window_points);
+                    let count = window_points.len();
+                    // Store: (window_start, window_end, sample_count, statistics)
+                    target_windows.push((window_start, window_end, count, stats));
+                }
+            }
+        }
+        
+        windowed_data.insert(target.clone(), target_windows);
+    }
+    
     // Calculate global min/max for Y axis
-    let all_rtts: Vec<f64> = by_target.values()
-        .flat_map(|v| v.iter().map(|(_, rtt)| *rtt))
+    let all_stats: Vec<&Statistics> = windowed_data.values()
+        .flat_map(|v| v.iter().map(|(_, _, _, stats)| stats))
         .collect();
     
-    let min_rtt = all_rtts.iter().copied().fold(f64::INFINITY, f64::min);
-    let max_rtt = all_rtts.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let min_rtt = all_stats.iter().map(|s| s.min).fold(f64::INFINITY, f64::min);
+    let max_rtt = all_stats.iter().map(|s| s.max).fold(f64::NEG_INFINITY, f64::max);
     
     let y_margin = (max_rtt - min_rtt) * 0.1;
     let y_min = (min_rtt - y_margin).max(0.0);
     let y_max = max_rtt + y_margin;
     
-    // Prepare data for JavaScript
+    // Prepare data for JavaScript with window statistics
     let mut data_json = String::from("{\n");
-    for (idx, (target, points)) in by_target.iter().enumerate() {
-        let mut sorted_points = points.clone();
-        sorted_points.sort_by_key(|(t, _)| *t);
-        
+    for (idx, (target, windows)) in windowed_data.iter().enumerate() {
         data_json.push_str(&format!("  \"{}\": [\n", target));
-        for (timestamp, rtt) in &sorted_points {
-            data_json.push_str(&format!("    [{}, {:.2}],\n", timestamp, rtt));
+        for (window_start, window_end, count, stats) in windows {
+            // Format: [window_start, window_end, count, min, max, avg, p95, p99]
+            data_json.push_str(&format!(
+                "    [{}, {}, {}, {:.2}, {:.2}, {:.2}, {:.2}, {:.2}],\n",
+                window_start, window_end, count,
+                stats.min, stats.max, stats.avg, stats.p95, stats.p99
+            ));
         }
         data_json.push_str("  ]");
-        if idx < by_target.len() - 1 {
+        if idx < windowed_data.len() - 1 {
             data_json.push(',');
         }
         data_json.push('\n');
@@ -482,19 +523,6 @@ pub fn generate_interactive_chart(
             }});
         }}
         
-        // Calculate statistics
-        function calculateStats(points) {{
-            const rtts = points.map(p => p[1]).sort((a, b) => a - b);
-            return {{
-                min: rtts[0],
-                max: rtts[rtts.length - 1],
-                avg: rtts.reduce((a, b) => a + b, 0) / rtts.length,
-                p50: rtts[Math.floor(rtts.length * 0.5)],
-                p95: rtts[Math.floor(rtts.length * 0.95)],
-                p99: rtts[Math.floor(rtts.length * 0.99)]
-            }};
-        }}
-        
         // Draw chart
         function drawChart() {{
             // Clear canvas
@@ -558,22 +586,26 @@ pub fn generate_interactive_chart(
             ctx.restore();
             
             // Draw data lines (breaking at gaps > 5 minutes)
+            // Data format: [window_start, window_end, count, min, max, avg, p95, p99]
             const MAX_GAP_SECONDS = 300;  // 5 minutes
-            Object.entries(data).forEach(([target, points], idx) => {{
+            Object.entries(data).forEach(([target, windows], idx) => {{
+                // Draw avg line (bold, primary)
                 ctx.strokeStyle = colors[idx];
                 ctx.lineWidth = 3;
                 ctx.beginPath();
                 
-                points.forEach((point, i) => {{
-                    const x = timeToX(point[0]);
-                    const y = rttToY(point[1]);
+                windows.forEach((window, i) => {{
+                    const window_center = (window[0] + window[1]) / 2;
+                    const avg = window[5];  // avg is at index 5
+                    const x = timeToX(window_center);
+                    const y = rttToY(avg);
                     
                     if (i === 0) {{
                         ctx.moveTo(x, y);
                     }} else {{
-                        // Check if there's a gap > 5 minutes
-                        const prevTime = points[i - 1][0];
-                        const currTime = point[0];
+                        // Check if there's a gap > 5 minutes between windows
+                        const prevTime = windows[i - 1][1];  // prev window end
+                        const currTime = window[0];  // curr window start
                         const gap = currTime - prevTime;
                         
                         if (gap > MAX_GAP_SECONDS) {{
@@ -588,6 +620,37 @@ pub fn generate_interactive_chart(
                 }});
                 
                 ctx.stroke();
+                
+                // Draw min/max lines (thin, lighter color)
+                ctx.strokeStyle = colors[idx];
+                ctx.globalAlpha = 0.3;
+                ctx.lineWidth = 1;
+                
+                // Min line
+                ctx.beginPath();
+                windows.forEach((window, i) => {{
+                    const window_center = (window[0] + window[1]) / 2;
+                    const min = window[3];
+                    const x = timeToX(window_center);
+                    const y = rttToY(min);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }});
+                ctx.stroke();
+                
+                // Max line
+                ctx.beginPath();
+                windows.forEach((window, i) => {{
+                    const window_center = (window[0] + window[1]) / 2;
+                    const max = window[4];
+                    const x = timeToX(window_center);
+                    const y = rttToY(max);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }});
+                ctx.stroke();
+                
+                ctx.globalAlpha = 1.0;
             }});
         }}
         
@@ -597,33 +660,59 @@ pub fn generate_interactive_chart(
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
             
-            // Find closest point
+            // Find closest window
             let closestDist = Infinity;
-            let closestPoint = null;
+            let closestWindow = null;
             let closestTarget = null;
             
-            Object.entries(data).forEach(([target, points]) => {{
-                points.forEach(point => {{
-                    const x = timeToX(point[0]);
-                    const y = rttToY(point[1]);
+            Object.entries(data).forEach(([target, windows]) => {{
+                windows.forEach(window => {{
+                    // window format: [start, end, count, min, max, avg, p95, p99]
+                    const window_center = (window[0] + window[1]) / 2;
+                    const avg = window[5];
+                    const x = timeToX(window_center);
+                    const y = rttToY(avg);
                     const dist = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
                     
-                    if (dist < closestDist && dist < 20) {{
+                    if (dist < closestDist && dist < 30) {{
                         closestDist = dist;
-                        closestPoint = point;
+                        closestWindow = window;
                         closestTarget = target;
                     }}
                 }});
             }});
             
-            if (closestPoint) {{
+            if (closestWindow) {{
                 tooltip.style.display = 'block';
                 tooltip.style.left = (e.clientX + 15) + 'px';
                 tooltip.style.top = (e.clientY + 15) + 'px';
+                
+                const start = closestWindow[0];
+                const end = closestWindow[1];
+                const count = closestWindow[2];
+                const min = closestWindow[3];
+                const max = closestWindow[4];
+                const avg = closestWindow[5];
+                const p95 = closestWindow[6];
+                const p99 = closestWindow[7];
+                const variance = max - min;
+                
                 tooltip.innerHTML = `
                     <strong>${{closestTarget}}</strong><br>
-                    <strong>Time:</strong> ${{formatDateTime(closestPoint[0])}}<br>
-                    <strong>Latency:</strong> ${{closestPoint[1].toFixed(2)}}ms
+                    <div style="font-size: 11px; color: #ccc; margin: 4px 0;">
+                        ${{formatTime(start)}} - ${{formatTime(end)}}<br>
+                        (${{count}} samples)
+                    </div>
+                    <div style="border-top: 1px solid #555; padding-top: 6px; margin-top: 6px;">
+                        <strong>Min:</strong> ${{min.toFixed(2)}}ms<br>
+                        <strong>Avg:</strong> ${{avg.toFixed(2)}}ms<br>
+                        <strong>Max:</strong> ${{max.toFixed(2)}}ms<br>
+                        <strong>P95:</strong> ${{p95.toFixed(2)}}ms<br>
+                        <strong>P99:</strong> ${{p99.toFixed(2)}}ms<br>
+                        <div style="font-size: 11px; color: #ccc; margin-top: 4px;">
+                            Variance: ${{variance.toFixed(2)}}ms
+                        </div>
+                    </div>
                 `;
             }} else {{
                 tooltip.style.display = 'none';
@@ -646,18 +735,39 @@ pub fn generate_interactive_chart(
             legendEl.appendChild(item);
         }});
         
-        // Create stats
+        // Create stats (overall statistics across all windows)
         const statsEl = document.getElementById('stats');
-        Object.entries(data).forEach(([target, points]) => {{
-            const stats = calculateStats(points);
+        Object.entries(data).forEach(([target, windows]) => {{
+            // Aggregate stats across all windows
+            let overall_min = Infinity;
+            let overall_max = -Infinity;
+            let sum_avg = 0;
+            let sum_p95 = 0;
+            let sum_p99 = 0;
+            let total_count = 0;
+            
+            windows.forEach(window => {{
+                // window format: [start, end, count, min, max, avg, p95, p99]
+                overall_min = Math.min(overall_min, window[3]);
+                overall_max = Math.max(overall_max, window[4]);
+                sum_avg += window[5] * window[2];  // weighted by count
+                sum_p95 += window[6] * window[2];
+                sum_p99 += window[7] * window[2];
+                total_count += window[2];
+            }});
+            
+            const overall_avg = sum_avg / total_count;
+            const overall_p95 = sum_p95 / total_count;
+            const overall_p99 = sum_p99 / total_count;
+            
             const card = document.createElement('div');
             card.className = 'stat-card';
             card.innerHTML = `
-                <div class="stat-label">${{target}}</div>
-                <div class="stat-value">${{stats.avg.toFixed(2)}}ms</div>
+                <div class="stat-label">${{target}} (${{windows.length}} windows, ${{total_count}} samples)</div>
+                <div class="stat-value">${{overall_avg.toFixed(2)}}ms</div>
                 <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                    Min: ${{stats.min.toFixed(2)}}ms | Max: ${{stats.max.toFixed(2)}}ms<br>
-                    P95: ${{stats.p95.toFixed(2)}}ms | P99: ${{stats.p99.toFixed(2)}}ms
+                    Min: ${{overall_min.toFixed(2)}}ms | Max: ${{overall_max.toFixed(2)}}ms<br>
+                    P95: ${{overall_p95.toFixed(2)}}ms | P99: ${{overall_p99.toFixed(2)}}ms
                 </div>
             `;
             statsEl.appendChild(card);
@@ -671,7 +781,7 @@ pub fn generate_interactive_chart(
         chrono::DateTime::from_timestamp(min_time, 0).unwrap().format("%Y-%m-%d %H:%M"),
         chrono::DateTime::from_timestamp(max_time, 0).unwrap().format("%Y-%m-%d %H:%M"),
         data_json,
-        colors.iter().enumerate().map(|(_i, c)| format!("\"{}\"", c)).collect::<Vec<_>>().join(", "),
+        format!("[{}]", colors.iter().enumerate().map(|(_i, c)| format!("\"{}\"", c)).collect::<Vec<_>>().join(", ")),
         min_time,
         max_time,
         format!("{:.2}", y_min),
