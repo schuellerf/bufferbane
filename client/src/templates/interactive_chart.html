@@ -127,6 +127,19 @@
         <h1>Bufferbane - Latency Over Time</h1>
         <p><strong>Period:</strong> {{START_TIME}} to {{END_TIME}}</p>
         
+        <div class="legend" style="margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 4px;">
+            <strong>Event Types:</strong>
+            <span style="margin-left: 20px;">
+                <span style="color: #FFA500; font-weight: bold;">▼</span> High Latency
+            </span>
+            <span style="margin-left: 20px;">
+                <span style="color: #FF0000; font-weight: bold;">▼</span> Packet Loss
+            </span>
+            <span style="margin-left: 20px;">
+                <span style="color: #8B0000; font-weight: bold;">▼</span> Error
+            </span>
+        </div>
+        
         <div class="chart-container">
             <canvas id="chart" width="1200" height="600"></canvas>
             <div id="tooltip"></div>
@@ -140,6 +153,7 @@
     <script>
         const data = {{DATA_JSON}};
         const colors = {{COLORS_JSON}};
+        const events = {{EVENTS_JSON}};
         const canvas = document.getElementById('chart');
         const ctx = canvas.getContext('2d');
         const tooltip = document.getElementById('tooltip');
@@ -152,9 +166,12 @@
         const minRtt = {{MIN_RTT}};
         const maxRtt = {{MAX_RTT}};
         
-        const padding = { left: 80, right: 40, top: 60, bottom: 60 };
+        // Increase bottom padding to make room for event timeline
+        const padding = { left: 80, right: 40, top: 60, bottom: 120 };
         const chartWidth = canvas.width - padding.left - padding.right;
-        const chartHeight = canvas.height - padding.top - padding.bottom;
+        const chartHeight = canvas.height - padding.top - padding.bottom - 60; // Reserve 60px for timeline
+        const timelineY = padding.top + chartHeight + 80; // Timeline position
+        const timelineHeight = 40;
         
         function timeToX(timestamp) {
             return padding.left + ((timestamp - minTime) / (maxTime - minTime)) * chartWidth;
@@ -376,6 +393,95 @@
                     ctx.globalAlpha = 1.0;  // Reset alpha
                 });
             });
+            
+            // Draw event markers on chart
+            drawEventMarkers();
+            
+            // Draw event timeline
+            drawEventTimeline();
+        }
+        
+        // Draw event markers on the main chart
+        function drawEventMarkers() {
+            events.forEach(event => {
+                const x = timeToX(event.timestamp);
+                
+                // Determine color based on event type
+                let color;
+                if (event.type === 'high_latency') {
+                    color = '#FFA500'; // Orange
+                } else if (event.type === 'packet_loss') {
+                    color = '#FF0000'; // Red
+                } else if (event.type === 'error') {
+                    color = '#8B0000'; // Dark red
+                } else {
+                    color = '#888888'; // Gray
+                }
+                
+                // Draw triangle marker at top of chart
+                ctx.fillStyle = color;
+                ctx.globalAlpha = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(x, padding.top - 15);
+                ctx.lineTo(x - 5, padding.top - 5);
+                ctx.lineTo(x + 5, padding.top - 5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                
+                // Draw vertical dashed line
+                ctx.strokeStyle = color;
+                ctx.globalAlpha = 0.3;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(x, padding.top);
+                ctx.lineTo(x, padding.top + chartHeight);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.globalAlpha = 1.0;
+            });
+        }
+        
+        // Draw event timeline at bottom
+        function drawEventTimeline() {
+            // Draw timeline background
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(padding.left, timelineY, chartWidth, timelineHeight);
+            
+            // Draw timeline border
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(padding.left, timelineY, chartWidth, timelineHeight);
+            
+            // Draw label
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('Events:', padding.left - 10, timelineY + 25);
+            
+            // Draw events as colored bars
+            events.forEach(event => {
+                const x = timeToX(event.timestamp);
+                
+                // Determine color
+                let color;
+                if (event.type === 'high_latency') {
+                    color = '#FFA500';
+                } else if (event.type === 'packet_loss') {
+                    color = '#FF0000';
+                } else if (event.type === 'error') {
+                    color = '#8B0000';
+                } else {
+                    color = '#888888';
+                }
+                
+                // Draw event bar
+                ctx.fillStyle = color;
+                ctx.globalAlpha = 0.7;
+                ctx.fillRect(x - 2, timelineY + 5, 4, timelineHeight - 10);
+                ctx.globalAlpha = 1.0;
+            });
         }
         
         // Handle mouse move for tooltips
@@ -411,24 +517,55 @@
                 });
             });
             
-            if (closestWindow) {
-                const [start, end, count, min, max, avg, p95, p99] = closestWindow;
-                const start_time = formatTime(start);
-                const end_time = formatTime(end);
-                const variance = max - min;
+            // Also check for nearby events
+            let nearbyEvents = [];
+            events.forEach(event => {
+                const eventX = timeToX(event.timestamp);
+                const dist = Math.abs(mouseX - eventX);
+                if (dist < 15) {
+                    nearbyEvents.push(event);
+                }
+            });
+            
+            if (closestWindow || nearbyEvents.length > 0) {
+                let tooltipHtml = '';
                 
-                tooltip.innerHTML = `
-                    <strong>${closestTarget}</strong><br>
-                    Time: ${start_time} - ${end_time}<br>
-                    Samples: ${count}<br>
-                    <hr style="margin: 8px 0; border: none; border-top: 1px solid rgba(255,255,255,0.3)">
-                    <strong>Min:</strong> ${min.toFixed(2)}ms<br>
-                    <strong>Max:</strong> ${max.toFixed(2)}ms<br>
-                    <strong>Avg:</strong> ${avg.toFixed(2)}ms<br>
-                    <strong>P95:</strong> ${p95.toFixed(2)}ms<br>
-                    <strong>P99:</strong> ${p99.toFixed(2)}ms<br>
-                    <strong>Variance:</strong> ${variance.toFixed(2)}ms
-                `;
+                // Show measurement data if available
+                if (closestWindow) {
+                    const [start, end, count, min, max, avg, p95, p99] = closestWindow;
+                    const start_time = formatTime(start);
+                    const end_time = formatTime(end);
+                    const variance = max - min;
+                    
+                    tooltipHtml += `
+                        <strong>${closestTarget}</strong><br>
+                        Time: ${start_time} - ${end_time}<br>
+                        Samples: ${count}<br>
+                        <hr style="margin: 8px 0; border: none; border-top: 1px solid rgba(255,255,255,0.3)">
+                        <strong>Min:</strong> ${min.toFixed(2)}ms<br>
+                        <strong>Max:</strong> ${max.toFixed(2)}ms<br>
+                        <strong>Avg:</strong> ${avg.toFixed(2)}ms<br>
+                        <strong>P95:</strong> ${p95.toFixed(2)}ms<br>
+                        <strong>P99:</strong> ${p99.toFixed(2)}ms<br>
+                        <strong>Variance:</strong> ${variance.toFixed(2)}ms
+                    `;
+                }
+                
+                // Show nearby events
+                if (nearbyEvents.length > 0) {
+                    if (closestWindow) {
+                        tooltipHtml += '<hr style="margin: 8px 0; border: none; border-top: 1px solid rgba(255,255,255,0.3)">';
+                    }
+                    tooltipHtml += '<strong style="color: #FFA500;">⚠️ Alerts:</strong><br>';
+                    nearbyEvents.forEach(event => {
+                        const eventTime = formatTime(event.timestamp);
+                        const icon = event.type === 'high_latency' ? '⏱️' : 
+                                    event.type === 'packet_loss' ? '📉' : '❌';
+                        tooltipHtml += `${icon} ${eventTime}: ${event.message}<br>`;
+                    });
+                }
+                
+                tooltip.innerHTML = tooltipHtml;
                 tooltip.style.display = 'block';
                 tooltip.style.left = (e.clientX + 15) + 'px';
                 tooltip.style.top = (e.clientY - 15) + 'px';

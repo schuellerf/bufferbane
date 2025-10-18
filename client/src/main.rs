@@ -298,7 +298,7 @@ async fn run_chart(config: &config::Config, args: &Args) -> Result<()> {
     // Generate chart with min/max/avg/percentile lines
     info!("Using {} time segments for aggregation", args.segments);
     if args.interactive {
-        charts::generate_interactive_chart(&measurements, &output_path, config, args.segments)?;
+        charts::generate_interactive_chart(&measurements, &output_path, config, args.segments, Some(&db))?;
         info!("Interactive chart saved to {:?}", output_path);
         info!("Open the file in your web browser to view the interactive chart");
     } else {

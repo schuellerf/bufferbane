@@ -279,6 +279,7 @@ pub fn generate_interactive_chart(
     output_path: &Path,
     _config: &Config,
     num_segments: usize,
+    db: Option<&crate::storage::Database>,
 ) -> Result<()> {
     if measurements.is_empty() {
         anyhow::bail!("No measurements to chart");
@@ -443,6 +444,39 @@ pub fn generate_interactive_chart(
     let y_min = (min_rtt - y_margin).max(0.0);
     let y_max = max_rtt + y_margin;
     
+    // Query events from database (alerts, packet loss, errors)
+    let events_json = if let Some(database) = db {
+        match database.query_events(min_time, max_time) {
+            Ok(events) => {
+                let mut json = String::from("[\n");
+                for (idx, event) in events.iter().enumerate() {
+                    json.push_str(&format!(
+                        "  {{\"timestamp\": {}, \"type\": \"{}\", \"target\": \"{}\", \"severity\": \"{}\", \"message\": \"{}\", \"value\": {}, \"threshold\": {}}}",
+                        event.timestamp,
+                        event.event_type.replace("\"", "\\\""),
+                        event.target.replace("\"", "\\\""),
+                        event.severity.replace("\"", "\\\""),
+                        event.message.replace("\"", "\\\""),
+                        event.value.map(|v| format!("{:.2}", v)).unwrap_or_else(|| "null".to_string()),
+                        event.threshold.map(|v| format!("{:.2}", v)).unwrap_or_else(|| "null".to_string())
+                    ));
+                    if idx < events.len() - 1 {
+                        json.push(',');
+                    }
+                    json.push('\n');
+                }
+                json.push_str("]");
+                json
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to query events: {}", e);
+                "[]".to_string()
+            }
+        }
+    } else {
+        "[]".to_string()
+    };
+    
     // Prepare data for JavaScript with window statistics
     let mut data_json = String::from("{\n");
     for (idx, (label, windows)) in windowed_data.iter().enumerate() {
@@ -485,6 +519,7 @@ pub fn generate_interactive_chart(
         .replace("{{END_TIME}}", &end_time)
         .replace("{{DATA_JSON}}", &data_json)
         .replace("{{COLORS_JSON}}", &colors_str)
+        .replace("{{EVENTS_JSON}}", &events_json)
         .replace("{{MIN_TIME}}", &min_time.to_string())
         .replace("{{MAX_TIME}}", &max_time.to_string())
         .replace("{{MIN_RTT}}", &format!("{:.2}", y_min))
