@@ -199,11 +199,11 @@ If server clock drifts over time:
 ### **Logs on Startup:**
 
 ```
-DEBUG Clock offset for schueller.pro: -490.23ms (measured: -490.23ms, EMA smoothed)
-DEBUG Clock offset for schueller.pro: -490.15ms (measured: -489.98ms, EMA smoothed)
-DEBUG Clock offset for schueller.pro: -490.12ms (measured: -490.01ms, EMA smoothed)
-DEBUG Clock offset for schueller.pro: -490.10ms (measured: -490.05ms, EMA smoothed)
-DEBUG Clock offset for schueller.pro: -490.08ms (measured: -489.95ms, EMA smoothed)
+DEBUG Clock offset for server.example.com: -490.23ms (measured: -490.23ms, EMA smoothed)
+DEBUG Clock offset for server.example.com: -490.15ms (measured: -489.98ms, EMA smoothed)
+DEBUG Clock offset for server.example.com: -490.12ms (measured: -490.01ms, EMA smoothed)
+DEBUG Clock offset for server.example.com: -490.10ms (measured: -490.05ms, EMA smoothed)
+DEBUG Clock offset for server.example.com: -490.08ms (measured: -489.95ms, EMA smoothed)
 ```
 
 **Interpretation**: Offset converging to -490ms (server is 490ms behind client)
@@ -211,7 +211,7 @@ DEBUG Clock offset for schueller.pro: -490.08ms (measured: -489.95ms, EMA smooth
 ### **Per-Measurement Logs:**
 
 ```
-DEBUG Server ECHO test completed: target=schueller.pro, rtt=12.34ms, 
+DEBUG Server ECHO test completed: target=server.example.com, rtt=12.34ms, 
   upload=7.12ms, download=5.15ms, processing=75μs, offset=-490.08ms, seq=42
 ```
 
@@ -223,7 +223,7 @@ DEBUG Server ECHO test completed: target=schueller.pro, rtt=12.34ms,
 ### **Validation Warnings (Rare):**
 
 ```
-DEBUG Offset correction validation failed for schueller.pro: RTT=12.34ms 
+DEBUG Offset correction validation failed for server.example.com: RTT=12.34ms 
   but corrected_sum=18.56ms (diff=6.22ms, offset=-490.08ms)
 ```
 
@@ -242,9 +242,9 @@ RUST_LOG=debug ./target/release/bufferbane 2>&1 | grep "Clock offset"
 
 **Expected Output:**
 ```
-Clock offset for schueller.pro: -490.23ms (measured: -490.23ms, EMA smoothed)
-Clock offset for schueller.pro: -490.15ms (measured: -489.98ms, EMA smoothed)
-Clock offset for schueller.pro: -490.10ms (measured: -490.05ms, EMA smoothed)
+Clock offset for server.example.com: -490.23ms (measured: -490.23ms, EMA smoothed)
+Clock offset for server.example.com: -490.15ms (measured: -489.98ms, EMA smoothed)
+Clock offset for server.example.com: -490.10ms (measured: -490.05ms, EMA smoothed)
 ```
 
 **Verification**: Offset should converge to a stable value within 10-20 measurements.

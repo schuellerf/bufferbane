@@ -3,7 +3,7 @@
 # Check Clock Synchronization Status
 #
 
-SERVER="${1:-schueller.pro}"
+SERVER="${1:-server.example.com}"
 
 echo "====================================="
 echo "Clock Sync Diagnostic"

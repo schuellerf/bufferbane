@@ -70,7 +70,7 @@ Bufferbane is a high-precision network monitoring tool designed to detect fine-g
 - Automated setup script (`./setup-server.sh`)
 - Generates matching client/server configs
 - One-command deployment to remote server
-- See [PHASE2_SETUP.md](PHASE2_SETUP.md) for details
+- See [INSTALL.md](INSTALL.md) for details
 
 ---
 
@@ -308,7 +308,7 @@ bufferbane/
 - ✅ Client-server integration (fully encrypted communication)
 - ✅ Configuration management (TOML)
 - ✅ Automated setup script (`setup-server.sh`)
-- ✅ Complete deployment documentation ([PHASE2_SETUP.md](PHASE2_SETUP.md))
+- ✅ Complete deployment documentation ([INSTALL.md](INSTALL.md))
 - ✅ Fallback to ICMP-only if server unavailable
 
 **What You Get**:
@@ -322,7 +322,7 @@ bufferbane/
 - Upload/download throughput testing
 - Bufferbloat detection (RRUL-style)
 
-**Try it now**: Run `./setup-server.sh` - See [PHASE2_QUICKSTART.md](PHASE2_QUICKSTART.md)
+**Try it now**: Run `./setup-server.sh your-server-hostname` for automated setup
 
 ### 📋 Phase 3: Multiple Servers (Planned)
 

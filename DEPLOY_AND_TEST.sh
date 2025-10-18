@@ -6,7 +6,7 @@
 
 set -e
 
-SERVER_HOST="${1:-schueller.pro}"
+SERVER_HOST="${1:-server.example.com}"
 SERVER_USER="${2:-${USER}}"
 
 echo "==================================="

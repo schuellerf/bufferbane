@@ -191,7 +191,7 @@ enum Severity {
 
 ### 5. Multi-Target Comparison
 
-**Problem:** When monitoring multiple targets (e.g., 1.1.1.1, 8.8.8.8, schueller.pro), hard to compare them.
+**Problem:** When monitoring multiple targets (e.g., 1.1.1.1, 8.8.8.8, server.example.com), hard to compare them.
 
 **Solution:** Enhanced comparison view:
 
@@ -204,7 +204,7 @@ enum Severity {
 
 **Mode 2: Difference View**
 - Show difference between targets
-- Example: `schueller.pro latency - 1.1.1.1 latency`
+- Example: `server.example.com latency - 1.1.1.1 latency`
 - Identifies when specific target degrades vs baseline
 - Useful for: "Is this my ISP or the server?"
 
@@ -215,7 +215,7 @@ enum Severity {
 - Good for detailed analysis
 
 **Mode 4: Correlation View**
-- Scatter plot: X=baseline (1.1.1.1), Y=target (schueller.pro)
+- Scatter plot: X=baseline (1.1.1.1), Y=target (server.example.com)
 - Shows if latencies are correlated (network issue) or independent (server issue)
 - 45° line = perfect correlation
 
@@ -294,7 +294,7 @@ show_one_way_latencies = true   # Show upload/download for server tests
 │       ├╮   ╭╯ ╰╮        ╭─╮   ╭─╯  ╰╮   │                         │
 │ 50ms  ├╯───╯   ╰────────╯ ╰───╯     ╰───┤ 1.1.1.1 (ICMP)          │
 │       │                                  │ 8.8.8.8 (ICMP)          │
-│ 0ms   └──────────────────────────────────┤ schueller.pro (Server)  │
+│ 0ms   └──────────────────────────────────┤ server.example.com (Server)  │
 │        00:00   06:00   12:00   18:00     │                         │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Packet Loss                                                         │

@@ -523,6 +523,22 @@ pub fn generate_interactive_chart(
             align-items: center;
             gap: 8px;
             font-size: 16px;
+            padding: 8px;
+            margin: 2px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, opacity 0.2s;
+            user-select: none;
+        }}
+        .legend-item:hover {{
+            background-color: #f0f0f0;
+        }}
+        .legend-item.disabled {{
+            opacity: 0.4;
+            text-decoration: line-through;
+        }}
+        .legend-item.disabled:hover {{
+            opacity: 0.6;
         }}
         .legend-color {{
             width: 24px;
@@ -540,6 +556,25 @@ pub fn generate_interactive_chart(
             background: #f8f9fa;
             border-radius: 6px;
             border-left: 4px solid #3366CC;
+            cursor: pointer;
+            transition: background-color 0.2s, opacity 0.2s, transform 0.2s;
+            user-select: none;
+        }}
+        .stat-card:hover {{
+            background: #e8e9ea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }}
+        .stat-card.disabled {{
+            opacity: 0.4;
+            background: #f0f0f0;
+        }}
+        .stat-card.disabled:hover {{
+            opacity: 0.6;
+            transform: none;
+        }}
+        .stat-card.disabled .stat-label {{
+            text-decoration: line-through;
         }}
         .stat-label {{
             font-size: 12px;
@@ -576,6 +611,9 @@ pub fn generate_interactive_chart(
         const canvas = document.getElementById('chart');
         const ctx = canvas.getContext('2d');
         const tooltip = document.getElementById('tooltip');
+        
+        // Track visibility of each series
+        const seriesVisible = {{}};
         
         const minTime = {};
         const maxTime = {};
@@ -674,6 +712,11 @@ pub fn generate_interactive_chart(
             // Data format: [window_start, window_end, count, min, max, avg, p95, p99]
             const MAX_GAP_SECONDS = 300;  // 5 minutes
             Object.entries(data).forEach(([target, windows], idx) => {{
+                // Skip hidden series
+                if (!seriesVisible[target]) {{
+                    return;
+                }}
+                
                 // Determine line style based on target label
                 let lineWidth = 2;
                 let dashPattern = [];
@@ -825,6 +868,11 @@ pub fn generate_interactive_chart(
             let closestTarget = null;
             
             Object.entries(data).forEach(([target, windows]) => {{
+                // Skip hidden series in tooltip search
+                if (!seriesVisible[target]) {{
+                    return;
+                }}
+                
                 windows.forEach(window => {{
                     // window format: [start, end, count, min, max, avg, p95, p99]
                     const window_center = (window[0] + window[1]) / 2;
@@ -882,15 +930,45 @@ pub fn generate_interactive_chart(
             tooltip.style.display = 'none';
         }});
         
-        // Create legend
+        // Create legend with interactivity
         const legendEl = document.getElementById('legend');
         Object.keys(data).forEach((target, idx) => {{
+            // Initialize visibility (all visible by default)
+            seriesVisible[target] = true;
+            
             const item = document.createElement('div');
             item.className = 'legend-item';
+            item.dataset.target = target;
             item.innerHTML = `
                 <div class="legend-color" style="background: ${{colors[idx]}}"></div>
                 <span>${{target}}</span>
             `;
+            
+            // Click to toggle visibility
+            item.addEventListener('click', () => {{
+                seriesVisible[target] = !seriesVisible[target];
+                item.classList.toggle('disabled', !seriesVisible[target]);
+                
+                // Also update the corresponding stat card
+                const statCard = document.querySelector(`.stat-card[data-target="${{target}}"]`);
+                if (statCard) {{
+                    statCard.classList.toggle('disabled', !seriesVisible[target]);
+                }}
+                
+                drawChart();  // Redraw without the hidden series
+            }});
+            
+            // Hover to highlight (optional visual feedback)
+            item.addEventListener('mouseenter', () => {{
+                if (seriesVisible[target]) {{
+                    item.style.fontWeight = 'bold';
+                }}
+            }});
+            
+            item.addEventListener('mouseleave', () => {{
+                item.style.fontWeight = 'normal';
+            }});
+            
             legendEl.appendChild(item);
         }});
         
@@ -921,6 +999,7 @@ pub fn generate_interactive_chart(
             
             const card = document.createElement('div');
             card.className = 'stat-card';
+            card.dataset.target = target;
             card.innerHTML = `
                 <div class="stat-label">${{target}} (${{windows.length}} windows, ${{total_count}} samples)</div>
                 <div class="stat-value">${{overall_avg.toFixed(2)}}ms</div>
@@ -929,6 +1008,21 @@ pub fn generate_interactive_chart(
                     P95: ${{overall_p95.toFixed(2)}}ms | P99: ${{overall_p99.toFixed(2)}}ms
                 </div>
             `;
+            
+            // Click to toggle visibility
+            card.addEventListener('click', () => {{
+                seriesVisible[target] = !seriesVisible[target];
+                card.classList.toggle('disabled', !seriesVisible[target]);
+                
+                // Also update the corresponding legend item
+                const legendItem = document.querySelector(`.legend-item[data-target="${{target}}"]`);
+                if (legendItem) {{
+                    legendItem.classList.toggle('disabled', !seriesVisible[target]);
+                }}
+                
+                drawChart();  // Redraw
+            }});
+            
             statsEl.appendChild(card);
         }});
         
