@@ -279,47 +279,70 @@ impl EchoRequestPayload {
 pub struct EchoReplyPayload {
     /// Sequence number (echoed from request)
     pub sequence: u32,
-    /// Client send timestamp (echoed from request)
-    pub client_timestamp: u64,
-    /// Server receive timestamp (nanoseconds)
-    pub server_timestamp: u64,
+    /// Client send timestamp (echoed from request, nanoseconds since UNIX_EPOCH)
+    pub client_send_timestamp: u64,
+    /// Server receive timestamp (nanoseconds since UNIX_EPOCH)
+    pub server_recv_timestamp: u64,
+    /// Server send timestamp (nanoseconds since UNIX_EPOCH)
+    pub server_send_timestamp: u64,
 }
 
 impl EchoReplyPayload {
     pub fn new(request: &EchoRequestPayload) -> Self {
-        let server_timestamp = SystemTime::now()
+        let server_recv_timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
+        
+        // Server_send_timestamp will be set just before sending
         Self {
             sequence: request.sequence,
-            client_timestamp: request.client_timestamp,
-            server_timestamp,
+            client_send_timestamp: request.client_timestamp,
+            server_recv_timestamp,
+            server_send_timestamp: server_recv_timestamp, // Will be updated before send
         }
     }
     
+    /// Update server send timestamp to current time
+    pub fn set_send_timestamp(&mut self) {
+        self.server_send_timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+    }
+    
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(20);
+        let mut bytes = Vec::with_capacity(28);
         bytes.extend_from_slice(&self.sequence.to_be_bytes());
-        bytes.extend_from_slice(&self.client_timestamp.to_be_bytes());
-        bytes.extend_from_slice(&self.server_timestamp.to_be_bytes());
+        bytes.extend_from_slice(&self.client_send_timestamp.to_be_bytes());
+        bytes.extend_from_slice(&self.server_recv_timestamp.to_be_bytes());
+        bytes.extend_from_slice(&self.server_send_timestamp.to_be_bytes());
         bytes
     }
     
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, PacketError> {
-        if bytes.len() < 20 {
+        if bytes.len() < 28 {
             return Err(PacketError::TooShort);
         }
         let sequence = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let client_timestamp = u64::from_be_bytes([
+        let client_send_timestamp = u64::from_be_bytes([
             bytes[4], bytes[5], bytes[6], bytes[7],
             bytes[8], bytes[9], bytes[10], bytes[11],
         ]);
-        let server_timestamp = u64::from_be_bytes([
+        let server_recv_timestamp = u64::from_be_bytes([
             bytes[12], bytes[13], bytes[14], bytes[15],
             bytes[16], bytes[17], bytes[18], bytes[19],
         ]);
-        Ok(Self { sequence, client_timestamp, server_timestamp })
+        let server_send_timestamp = u64::from_be_bytes([
+            bytes[20], bytes[21], bytes[22], bytes[23],
+            bytes[24], bytes[25], bytes[26], bytes[27],
+        ]);
+        Ok(Self { 
+            sequence, 
+            client_send_timestamp, 
+            server_recv_timestamp,
+            server_send_timestamp,
+        })
     }
 }
 

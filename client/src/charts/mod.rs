@@ -22,7 +22,8 @@ pub fn generate_latency_chart(
     let mut by_target: HashMap<String, Vec<(i64, f64)>> = HashMap::new();
     
     for m in measurements {
-        if m.test_type == "icmp" && m.status == "success" {
+        // Include both ICMP and server-based tests
+        if (m.test_type == "icmp" || m.test_type == "server_echo") && m.status == "success" {
             if let Some(rtt) = m.rtt_ms {
                 by_target
                     .entry(m.target.clone())
@@ -280,22 +281,109 @@ pub fn generate_interactive_chart(
         anyhow::bail!("No measurements to chart");
     }
     
-    // Group measurements by target
-    let mut by_target: HashMap<String, Vec<(i64, f64)>> = HashMap::new();
+    // Group measurements by target and metric type
+    // For server tests, we'll have upload, download, and rtt
+    // For ICMP tests, we'll only have rtt
+    #[derive(Clone)]
+    struct SeriesData {
+        label: String,
+        color: String,
+        points: Vec<(i64, f64)>,
+        is_server_metric: bool,
+    }
     
+    let mut series: Vec<SeriesData> = Vec::new();
+    
+    // Group measurements by target and collect all metrics
+    let mut by_target: HashMap<String, Vec<&Measurement>> = HashMap::new();
     for m in measurements {
-        if m.test_type == "icmp" && m.status == "success" {
-            if let Some(rtt) = m.rtt_ms {
-                by_target
-                    .entry(m.target.clone())
-                    .or_insert_with(Vec::new)
-                    .push((m.timestamp, rtt));
-            }
+        if (m.test_type == "icmp" || m.test_type == "server_echo") && m.status == "success" {
+            by_target.entry(m.target.clone()).or_insert_with(Vec::new).push(m);
         }
     }
     
     if by_target.is_empty() {
         anyhow::bail!("No successful measurements to chart");
+    }
+    
+    // Color palette for different targets
+    let colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F"];
+    let mut color_idx = 0;
+    
+    for (target, target_measurements) in by_target.iter() {
+        // Check if this is a server target
+        let is_server = target_measurements.iter().any(|m| m.test_type == "server_echo");
+        
+        if is_server {
+            // For server targets, create 3 series: upload, download, rtt
+            let base_color = colors[color_idx % colors.len()];
+            color_idx += 1;
+            
+            // Upload latency series (lighter, dashed)
+            let mut upload_points = Vec::new();
+            for m in target_measurements.iter() {
+                if let Some(upload) = m.upload_latency_ms {
+                    upload_points.push((m.timestamp, upload));
+                }
+            }
+            if !upload_points.is_empty() {
+                series.push(SeriesData {
+                    label: format!("{} ↑ Upload", target),
+                    color: format!("{}80", base_color), // Add transparency
+                    points: upload_points,
+                    is_server_metric: true,
+                });
+            }
+            
+            // Download latency series (medium)
+            let mut download_points = Vec::new();
+            for m in target_measurements.iter() {
+                if let Some(download) = m.download_latency_ms {
+                    download_points.push((m.timestamp, download));
+                }
+            }
+            if !download_points.is_empty() {
+                series.push(SeriesData {
+                    label: format!("{} ↓ Download", target),
+                    color: format!("{}B0", base_color), // Medium transparency
+                    points: download_points,
+                    is_server_metric: true,
+                });
+            }
+            
+            // RTT series (full color, thicker)
+            let mut rtt_points = Vec::new();
+            for m in target_measurements.iter() {
+                if let Some(rtt) = m.rtt_ms {
+                    rtt_points.push((m.timestamp, rtt));
+                }
+            }
+            if !rtt_points.is_empty() {
+                series.push(SeriesData {
+                    label: format!("{} RTT", target),
+                    color: base_color.to_string(),
+                    points: rtt_points,
+                    is_server_metric: true,
+                });
+            }
+        } else {
+            // For ICMP targets, just RTT
+            let mut rtt_points = Vec::new();
+            for m in target_measurements.iter() {
+                if let Some(rtt) = m.rtt_ms {
+                    rtt_points.push((m.timestamp, rtt));
+                }
+            }
+            if !rtt_points.is_empty() {
+                series.push(SeriesData {
+                    label: format!("{} ICMP", target),
+                    color: colors[color_idx % colors.len()].to_string(),
+                    points: rtt_points,
+                    is_server_metric: false,
+                });
+                color_idx += 1;
+            }
+        }
     }
     
     // Calculate time range
@@ -305,14 +393,14 @@ pub fn generate_interactive_chart(
     // Calculate windowing parameters
     let window_size = ((max_time - min_time) / num_segments as i64).max(1);
     
-    // Aggregate data into windows with statistics
+    // Aggregate data into windows with statistics for each series
     let mut windowed_data: HashMap<String, Vec<(i64, i64, usize, Statistics)>> = HashMap::new();
     
-    for (target, points) in &by_target {
-        let mut sorted_points = points.clone();
+    for series_data in &series {
+        let mut sorted_points = series_data.points.clone();
         sorted_points.sort_by_key(|(t, _)| *t);
         
-        let mut target_windows = Vec::new();
+        let mut series_windows = Vec::new();
         
         // Split into segments and skip gaps > 5 minutes
         let segments = split_into_segments(&sorted_points, 300);
@@ -324,19 +412,19 @@ pub fn generate_interactive_chart(
                 let window_points: Vec<f64> = segment
                     .iter()
                     .filter(|(t, _)| *t >= window_start && *t < window_end)
-                    .map(|(_, rtt)| *rtt)
+                    .map(|(_, value)| *value)
                     .collect();
                 
                 if !window_points.is_empty() {
                     let stats = calculate_statistics(&window_points);
                     let count = window_points.len();
                     // Store: (window_start, window_end, sample_count, statistics)
-                    target_windows.push((window_start, window_end, count, stats));
+                    series_windows.push((window_start, window_end, count, stats));
                 }
             }
         }
         
-        windowed_data.insert(target.clone(), target_windows);
+        windowed_data.insert(series_data.label.clone(), series_windows);
     }
     
     // Calculate global min/max for Y axis
@@ -353,8 +441,8 @@ pub fn generate_interactive_chart(
     
     // Prepare data for JavaScript with window statistics
     let mut data_json = String::from("{\n");
-    for (idx, (target, windows)) in windowed_data.iter().enumerate() {
-        data_json.push_str(&format!("  \"{}\": [\n", target));
+    for (idx, (label, windows)) in windowed_data.iter().enumerate() {
+        data_json.push_str(&format!("  \"{}\": [\n", label));
         for (window_start, window_end, count, stats) in windows {
             // Format: [window_start, window_end, count, min, max, avg, p95, p99]
             data_json.push_str(&format!(
@@ -371,14 +459,11 @@ pub fn generate_interactive_chart(
     }
     data_json.push_str("}");
     
-    // Colors for each target
-    let colors = vec![
-        "#3366CC", // Blue
-        "#109618", // Green
-        "#DC3912", // Red
-        "#FF9900", // Orange
-        "#990099", // Purple
-    ];
+    // Extract colors from series data
+    let colors_json: Vec<String> = series.iter()
+        .map(|s| format!("\"{}\"", s.color))
+        .collect();
+    let colors_str = format!("[{}]", colors_json.join(", "));
     
     // Generate HTML
     let html = format!(r#"<!DOCTYPE html>
@@ -589,6 +674,33 @@ pub fn generate_interactive_chart(
             // Data format: [window_start, window_end, count, min, max, avg, p95, p99]
             const MAX_GAP_SECONDS = 300;  // 5 minutes
             Object.entries(data).forEach(([target, windows], idx) => {{
+                // Determine line style based on target label
+                let lineWidth = 2;
+                let dashPattern = [];
+                let alphaMultiplier = 1.0;
+                
+                if (target.includes('↑ Upload')) {{
+                    // Upload: dashed line, thinner, lighter
+                    dashPattern = [8, 4];
+                    lineWidth = 2;
+                    alphaMultiplier = 0.8;
+                }} else if (target.includes('↓ Download')) {{
+                    // Download: dotted line, thinner, medium
+                    dashPattern = [2, 3];
+                    lineWidth = 2;
+                    alphaMultiplier = 0.9;
+                }} else if (target.includes('RTT')) {{
+                    // RTT: solid line, thicker, full color
+                    dashPattern = [];
+                    lineWidth = 3;
+                    alphaMultiplier = 1.0;
+                }} else {{
+                    // ICMP: solid line, medium
+                    dashPattern = [];
+                    lineWidth = 2;
+                    alphaMultiplier = 1.0;
+                }}
+                
                 // Split windows into continuous segments (no gaps > 5 min)
                 const segments = [];
                 let currentSegment = [];
@@ -651,8 +763,9 @@ pub fn generate_interactive_chart(
                     
                     // Draw min line (thin, lighter color)
                     ctx.strokeStyle = colors[idx];
-                    ctx.globalAlpha = 0.3;
+                    ctx.globalAlpha = 0.3 * alphaMultiplier;
                     ctx.lineWidth = 1;
+                    ctx.setLineDash(dashPattern);
                     ctx.beginPath();
                     segment.forEach((window, i) => {{
                         const window_center = (window[0] + window[1]) / 2;
@@ -665,6 +778,7 @@ pub fn generate_interactive_chart(
                     ctx.stroke();
                     
                     // Draw max line (thin, lighter color)
+                    ctx.setLineDash(dashPattern);
                     ctx.beginPath();
                     segment.forEach((window, i) => {{
                         const window_center = (window[0] + window[1]) / 2;
@@ -675,11 +789,14 @@ pub fn generate_interactive_chart(
                         else ctx.lineTo(x, y);
                     }});
                     ctx.stroke();
+                    ctx.setLineDash([]);
                     ctx.globalAlpha = 1.0;
                     
                     // Draw avg line (bold, primary)
                     ctx.strokeStyle = colors[idx];
-                    ctx.lineWidth = 3;
+                    ctx.globalAlpha = alphaMultiplier;
+                    ctx.lineWidth = lineWidth;
+                    ctx.setLineDash(dashPattern);
                     ctx.beginPath();
                     segment.forEach((window, i) => {{
                         const window_center = (window[0] + window[1]) / 2;
@@ -690,6 +807,8 @@ pub fn generate_interactive_chart(
                         else ctx.lineTo(x, y);
                     }});
                     ctx.stroke();
+                    ctx.setLineDash([]);  // Reset dash pattern
+                    ctx.globalAlpha = 1.0;  // Reset alpha
                 }});
             }});
         }}
@@ -821,7 +940,7 @@ pub fn generate_interactive_chart(
         chrono::DateTime::from_timestamp(min_time, 0).unwrap().format("%Y-%m-%d %H:%M"),
         chrono::DateTime::from_timestamp(max_time, 0).unwrap().format("%Y-%m-%d %H:%M"),
         data_json,
-        format!("[{}]", colors.iter().enumerate().map(|(_i, c)| format!("\"{}\"", c)).collect::<Vec<_>>().join(", ")),
+        colors_str,
         min_time,
         max_time,
         format!("{:.2}", y_min),

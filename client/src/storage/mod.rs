@@ -46,10 +46,28 @@ impl Database {
                 throughput_kbps REAL,
                 dns_time_ms REAL,
                 status TEXT NOT NULL,
-                error_detail TEXT
+                error_detail TEXT,
+                upload_latency_ms REAL,
+                download_latency_ms REAL,
+                server_processing_us INTEGER
             )",
             [],
         )?;
+        
+        // Migrate existing databases: add new columns if they don't exist
+        // SQLite doesn't have ALTER TABLE IF NOT EXISTS, so we need to check
+        let _ = self.conn.execute(
+            "ALTER TABLE measurements ADD COLUMN upload_latency_ms REAL",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE measurements ADD COLUMN download_latency_ms REAL",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE measurements ADD COLUMN server_processing_us INTEGER",
+            [],
+        );
         
         // Create indices for common queries
         self.conn.execute(
@@ -107,8 +125,9 @@ impl Database {
             "INSERT INTO measurements (
                 timestamp, monotonic_ns, interface, connection_type, test_type, target,
                 server_name, rtt_ms, jitter_ms, packet_loss_pct, throughput_kbps,
-                dns_time_ms, status, error_detail
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                dns_time_ms, status, error_detail, upload_latency_ms, download_latency_ms,
+                server_processing_us
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 m.timestamp,
                 m.monotonic_ns as i64,
@@ -124,6 +143,9 @@ impl Database {
                 m.dns_time_ms,
                 &m.status,
                 &m.error_detail,
+                m.upload_latency_ms,
+                m.download_latency_ms,
+                m.server_processing_us,
             ],
         )?;
         
@@ -135,7 +157,8 @@ impl Database {
             "SELECT 
                 timestamp, monotonic_ns, interface, connection_type, test_type, target,
                 server_name, rtt_ms, jitter_ms, packet_loss_pct, throughput_kbps,
-                dns_time_ms, status, error_detail
+                dns_time_ms, status, error_detail, upload_latency_ms, download_latency_ms,
+                server_processing_us
             FROM measurements
             WHERE timestamp >= ?1 AND timestamp <= ?2
             ORDER BY timestamp ASC"
@@ -157,6 +180,9 @@ impl Database {
                 dns_time_ms: row.get(11)?,
                 status: row.get(12)?,
                 error_detail: row.get(13)?,
+                upload_latency_ms: row.get(14)?,
+                download_latency_ms: row.get(15)?,
+                server_processing_us: row.get(16)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -164,7 +190,6 @@ impl Database {
         Ok(measurements)
     }
     
-    #[allow(dead_code)]
     pub fn store_event(&self, 
         event_type: &str, 
         target: &str, 
@@ -197,5 +222,40 @@ impl Database {
         
         Ok(())
     }
+    
+    pub fn query_events(&self, start: i64, end: i64) -> Result<Vec<Event>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT timestamp, event_type, target, severity, message, value, threshold
+            FROM events
+            WHERE timestamp >= ?1 AND timestamp <= ?2
+            ORDER BY timestamp ASC"
+        )?;
+        
+        let events = stmt.query_map(params![start, end], |row| {
+            Ok(Event {
+                timestamp: row.get(0)?,
+                event_type: row.get(1)?,
+                target: row.get(2)?,
+                severity: row.get(3)?,
+                message: row.get(4)?,
+                value: row.get(5)?,
+                threshold: row.get(6)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(events)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Event {
+    pub timestamp: i64,
+    pub event_type: String,
+    pub target: String,
+    pub severity: String,
+    pub message: String,
+    pub value: Option<f64>,
+    pub threshold: Option<f64>,
 }
 

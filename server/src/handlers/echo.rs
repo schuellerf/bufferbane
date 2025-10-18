@@ -41,7 +41,10 @@ pub async fn handle_echo_request(
     session_manager.update_last_seen(header.client_id).await;
     
     // Create echo reply
-    let reply = EchoReplyPayload::new(&request);
+    let mut reply = EchoReplyPayload::new(&request);
+    
+    // Set send timestamp just before sending (most accurate)
+    reply.set_send_timestamp();
     let reply_bytes = reply.to_bytes();
     
     // Build response packet

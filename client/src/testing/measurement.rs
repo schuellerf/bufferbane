@@ -45,6 +45,15 @@ pub struct Measurement {
     
     /// Error detail if status is "error"
     pub error_detail: Option<String>,
+    
+    /// Upload latency in milliseconds (client → server, for server tests only)
+    pub upload_latency_ms: Option<f64>,
+    
+    /// Download latency in milliseconds (server → client, for server tests only)
+    pub download_latency_ms: Option<f64>,
+    
+    /// Server processing time in microseconds (for server tests only)
+    pub server_processing_us: Option<i64>,
 }
 
 impl Measurement {
@@ -77,6 +86,9 @@ impl Measurement {
             dns_time_ms: None,
             status: "pending".to_string(),
             error_detail: None,
+            upload_latency_ms: None,
+            download_latency_ms: None,
+            server_processing_us: None,
         }
     }
     
