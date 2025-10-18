@@ -15,6 +15,14 @@ impl Database {
         let conn = Connection::open(path)
             .context("Failed to open database")?;
         
+        // Enable WAL mode for better concurrent read/write performance
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .context("Failed to enable WAL mode")?;
+        
+        // Set busy timeout to 5 seconds (handles brief lock conflicts)
+        conn.pragma_update(None, "busy_timeout", "5000")
+            .context("Failed to set busy timeout")?;
+        
         Ok(Self { conn })
     }
     
