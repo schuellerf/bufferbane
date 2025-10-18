@@ -20,6 +20,10 @@ pub struct IcmpTester {
 
 impl IcmpTester {
     pub fn new(config: Arc<Config>) -> Result<Self> {
+        Self::new_with_additional_targets(config, Vec::new())
+    }
+    
+    pub fn new_with_additional_targets(config: Arc<Config>, additional_targets: Vec<IpAddr>) -> Result<Self> {
         // Create ICMP client
         let ping_config = PingConfig::default();
         let client = Client::new(&ping_config)
@@ -27,6 +31,9 @@ impl IcmpTester {
         
         // Resolve target IPs
         let mut targets = Vec::new();
+        
+        // Add additional targets first (e.g., auto-detected gateway)
+        targets.extend(additional_targets);
         
         // Add public DNS servers
         for dns in &config.targets.public_dns {

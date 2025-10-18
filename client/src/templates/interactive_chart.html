@@ -138,6 +138,9 @@
             <span style="margin-left: 20px;">
                 <span style="color: #8B0000; font-weight: bold;">▼</span> Error
             </span>
+            <span style="margin-left: 20px;">
+                <span style="color: #2E86DE; font-weight: bold;">▼</span> IP Change
+            </span>
         </div>
         
         <div class="chart-container">
@@ -414,6 +417,8 @@
                     color = '#FF0000'; // Red
                 } else if (event.type === 'error') {
                     color = '#8B0000'; // Dark red
+                } else if (event.type === 'ip_change') {
+                    color = '#2E86DE'; // Blue
                 } else {
                     color = '#888888'; // Gray
                 }
@@ -472,6 +477,8 @@
                     color = '#FF0000';
                 } else if (event.type === 'error') {
                     color = '#8B0000';
+                } else if (event.type === 'ip_change') {
+                    color = '#2E86DE';
                 } else {
                     color = '#888888';
                 }
@@ -560,7 +567,8 @@
                     nearbyEvents.forEach(event => {
                         const eventTime = formatTime(event.timestamp);
                         const icon = event.type === 'high_latency' ? '⏱️' : 
-                                    event.type === 'packet_loss' ? '📉' : '❌';
+                                    event.type === 'packet_loss' ? '📉' :
+                                    event.type === 'ip_change' ? '🌐' : '❌';
                         tooltipHtml += `${icon} ${eventTime}: ${event.message}<br>`;
                     });
                 }

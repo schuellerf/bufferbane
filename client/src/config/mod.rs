@@ -15,6 +15,8 @@ pub struct Config {
     pub output: OutputConfig,
     pub export: ExportConfig,
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub monitoring: MonitoringConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -103,6 +105,29 @@ pub struct LoggingConfig {
     pub max_files: u32,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MonitoringConfig {
+    #[serde(default = "default_true")]
+    pub auto_detect_gateway: bool,
+    #[serde(default = "default_true")]
+    pub monitor_public_ip: bool,
+    #[serde(default = "default_public_ip_check_interval")]
+    pub public_ip_check_interval_sec: u64,
+    #[serde(default = "default_public_ip_service")]
+    pub public_ip_service: String,
+}
+
+impl Default for MonitoringConfig {
+    fn default() -> Self {
+        Self {
+            auto_detect_gateway: true,
+            monitor_public_ip: true,
+            public_ip_check_interval_sec: 300, // 5 minutes
+            public_ip_service: "https://api.ipify.org".to_string(),
+        }
+    }
+}
+
 fn default_connection_type() -> String {
     "auto".to_string()
 }
@@ -117,6 +142,14 @@ fn default_knock_timeout_ms() -> u64 {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_public_ip_check_interval() -> u64 {
+    300 // 5 minutes
+}
+
+fn default_public_ip_service() -> String {
+    "https://api.ipify.org".to_string()
 }
 
 impl Config {

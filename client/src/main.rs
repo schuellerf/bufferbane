@@ -8,6 +8,7 @@ mod storage;
 mod analysis;
 mod output;
 mod charts;
+mod network_monitor;
 
 use anyhow::Result;
 use clap::Parser;
@@ -111,9 +112,42 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     db.initialize()?;
     info!("Database initialized");
     
-    // Initialize ICMP tester
+    // Auto-detect gateway if enabled
+    let detected_gateway = if config.monitoring.auto_detect_gateway {
+        match network_monitor::detect_default_gateway() {
+            Ok(gateway) => {
+                info!("Auto-detected gateway: {}", gateway);
+                Some(gateway)
+            }
+            Err(e) => {
+                warn!("Failed to auto-detect gateway: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    
+    // Initialize public IP monitor
+    let mut ip_monitor = if config.monitoring.monitor_public_ip {
+        let monitor = network_monitor::PublicIpMonitor::new(
+            config.monitoring.public_ip_service.clone(),
+            config.monitoring.public_ip_check_interval_sec,
+        );
+        info!("Public IP monitoring enabled (check interval: {}s)", config.monitoring.public_ip_check_interval_sec);
+        Some(monitor)
+    } else {
+        None
+    };
+    
+    // Initialize ICMP tester with optional gateway
     let config_arc = std::sync::Arc::new(config.clone());
-    let tester = testing::IcmpTester::new(config_arc.clone())?;
+    let tester = if let Some(gateway) = detected_gateway {
+        info!("Adding detected gateway {} to test targets", gateway);
+        testing::IcmpTester::new_with_additional_targets(config_arc.clone(), vec![gateway])?
+    } else {
+        testing::IcmpTester::new(config_arc.clone())?
+    };
     info!("ICMP tester initialized");
     
     // Initialize server tester (Phase 2) if enabled
@@ -170,11 +204,59 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     let mut hourly_stats = HourlyStats::new();
     let mut last_stats_log = chrono::Local::now();
     
+    // Track last IP check time
+    let mut last_ip_check = chrono::Local::now();
+    
+    // Check public IP immediately on startup
+    if let Some(ref mut monitor) = ip_monitor {
+        if let Some((old_ip, new_ip)) = monitor.check().await {
+            // Store initial public IP detection
+            let message = if let Some(old) = old_ip {
+                format!("Public IP changed: {} -> {}", old, new_ip)
+            } else {
+                format!("Public IP detected: {}", new_ip)
+            };
+            let _ = db.store_event(
+                "ip_change",
+                &new_ip.to_string(),
+                "info",
+                &message,
+                None,
+                None,
+            );
+        }
+    }
+    
     // Make server_tester mutable for running tests
     let mut server_tester = server_tester;
     
     loop {
         interval.tick().await;
+        
+        // Check public IP periodically
+        if let Some(ref mut monitor) = ip_monitor {
+            let now = chrono::Local::now();
+            let elapsed = (now - last_ip_check).num_seconds() as u64;
+            
+            if elapsed >= monitor.get_check_interval() {
+                if let Some((old_ip, new_ip)) = monitor.check().await {
+                    let message = if let Some(old) = old_ip {
+                        format!("Public IP changed: {} -> {}", old, new_ip)
+                    } else {
+                        format!("Public IP detected: {}", new_ip)
+                    };
+                    let _ = db.store_event(
+                        "ip_change",
+                        &new_ip.to_string(),
+                        "info",
+                        &message,
+                        None,
+                        None,
+                    );
+                }
+                last_ip_check = now;
+            }
+        }
         
         let mut all_measurements = Vec::new();
         
