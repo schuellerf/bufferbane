@@ -190,7 +190,6 @@ impl Database {
         Ok(measurements)
     }
     
-    #[allow(dead_code)]
     pub fn store_event(&self, 
         event_type: &str, 
         target: &str, 

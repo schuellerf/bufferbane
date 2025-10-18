@@ -107,7 +107,7 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     }
     
     // Initialize database
-    let db = storage::Database::new(&config.general.database_path)?;
+    let db = std::sync::Arc::new(storage::Database::new(&config.general.database_path)?);
     db.initialize()?;
     info!("Database initialized");
     
@@ -157,7 +157,7 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     let output_handle = output::OutputManager::new(config.clone());
     
     // Initialize alert system
-    let alert_manager = analysis::AlertManager::new(config.clone());
+    let alert_manager = analysis::AlertManager::new(config.clone(), db.clone());
     
     // Start monitoring loop
     info!("Starting monitoring loop (Press Ctrl+C to stop)");
