@@ -557,7 +557,8 @@ pub fn generate_interactive_chart(
             ctx.fillText('Latency (ms)', 0, 0);
             ctx.restore();
             
-            // Draw data lines
+            // Draw data lines (breaking at gaps > 5 minutes)
+            const MAX_GAP_SECONDS = 300;  // 5 minutes
             Object.entries(data).forEach(([target, points], idx) => {{
                 ctx.strokeStyle = colors[idx];
                 ctx.lineWidth = 3;
@@ -570,7 +571,19 @@ pub fn generate_interactive_chart(
                     if (i === 0) {{
                         ctx.moveTo(x, y);
                     }} else {{
-                        ctx.lineTo(x, y);
+                        // Check if there's a gap > 5 minutes
+                        const prevTime = points[i - 1][0];
+                        const currTime = point[0];
+                        const gap = currTime - prevTime;
+                        
+                        if (gap > MAX_GAP_SECONDS) {{
+                            // Start a new line segment (don't connect across gap)
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.moveTo(x, y);
+                        }} else {{
+                            ctx.lineTo(x, y);
+                        }}
                     }}
                 }});
                 

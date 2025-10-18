@@ -117,10 +117,16 @@ database_path = "/var/lib/bufferbane/measurements.db"
 Continuously ping targets and store results:
 
 ```bash
+# Normal mode - show every ping
 ./target/release/bufferbane --config client.conf
+
+# Quiet mode - hourly statistics (recommended for systemd service)
+./target/release/bufferbane --config client.conf --quiet
+# Or short form:
+./target/release/bufferbane -c client.conf -q
 ```
 
-**Output**:
+**Normal Mode Output** (every ping):
 ```
 [14:23:59] 8.8.8.8 -> 18.28ms
 [14:23:59] 1.1.1.1 -> 13.47ms
@@ -128,9 +134,24 @@ Continuously ping targets and store results:
 [14:24:00] 1.1.1.1 -> 15.21ms
 ```
 
+**Quiet Mode Output** (hourly statistics):
+```
+2025-10-18T15:00:00Z ═══ Hourly Statistics ═══
+2025-10-18T15:00:00Z Total measurements: 7200 (failed: 12)
+2025-10-18T15:00:00Z   dns.google: 3600 tests, 0.1% loss
+2025-10-18T15:00:00Z     RTT: min=8.45ms avg=10.23ms max=45.67ms p95=15.89ms
+2025-10-18T15:00:00Z     Jitter: avg=1.34ms
+2025-10-18T15:00:00Z   1.1.1.1: 3600 tests, 0.2% loss
+2025-10-18T15:00:00Z     RTT: min=5.23ms avg=7.89ms max=30.12ms p95=12.34ms
+2025-10-18T15:00:00Z     Jitter: avg=0.98ms
+2025-10-18T15:00:00Z ═══════════════════════
+```
+
 **Stop**: Press `Ctrl+C`
 
-**Use case**: Run continuously to collect data
+**Use cases**: 
+- **Normal mode**: Interactive monitoring, immediate feedback
+- **Quiet mode**: Systemd service, reduced log noise, long-term monitoring
 
 ---
 
@@ -193,6 +214,7 @@ Generate **static PNG** or **interactive HTML** charts:
 - Shaded area between min/max (variance)
 - Color-coded targets with legend
 - **Large, readable fonts** for axis labels and legend
+- **Gap detection**: Lines break when data gap > 5 minutes (shows monitoring downtime)
 - 1920x1080 resolution (configurable)
 
 #### Interactive HTML Charts (NEW! ✨)
@@ -218,6 +240,7 @@ Generate **static PNG** or **interactive HTML** charts:
 - 🎨 **Modern UI**: Professional design with grid, legend, and styled cards
 - 💾 **Standalone file**: No external dependencies, works offline
 - 📏 **Smaller file size**: ~14KB HTML vs ~300KB PNG
+- 🔍 **Gap detection**: Lines break when data gap > 5 minutes (shows monitoring downtime)
 
 **Technology**: Pure HTML5 Canvas + JavaScript (no external libraries)
 

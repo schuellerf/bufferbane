@@ -51,6 +51,10 @@ struct Args {
     /// Generate interactive HTML chart instead of static PNG
     #[arg(long)]
     interactive: bool,
+    
+    /// Quiet mode: Log hourly statistics instead of every ping (for systemd service)
+    #[arg(short, long)]
+    quiet: bool,
 }
 
 #[tokio::main]
@@ -84,16 +88,19 @@ async fn main() -> Result<()> {
     } else {
         // Monitoring mode (default)
         info!("Starting monitoring mode");
-        run_monitoring(&config).await?;
+        run_monitoring(&config, args.quiet).await?;
     }
     
     Ok(())
 }
 
-async fn run_monitoring(config: &config::Config) -> Result<()> {
+async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     info!("Initializing monitoring...");
     info!("Test interval: {}ms", config.general.test_interval_ms);
     info!("Database: {:?}", config.general.database_path);
+    if quiet {
+        info!("Quiet mode: Logging hourly statistics only");
+    }
     
     // Initialize database
     let db = storage::Database::new(&config.general.database_path)?;
@@ -118,6 +125,10 @@ async fn run_monitoring(config: &config::Config) -> Result<()> {
         tokio::time::Duration::from_millis(config.general.test_interval_ms)
     );
     
+    // For hourly statistics in quiet mode
+    let mut hourly_stats = HourlyStats::new();
+    let mut last_stats_log = chrono::Local::now();
+    
     loop {
         interval.tick().await;
         
@@ -136,9 +147,22 @@ async fn run_monitoring(config: &config::Config) -> Result<()> {
                     error!("Alert check failed: {}", e);
                 }
                 
-                // Update output
-                if let Err(e) = output_handle.update(&measurements) {
-                    error!("Output update failed: {}", e);
+                // Update output or statistics
+                if quiet {
+                    // Quiet mode: accumulate stats
+                    hourly_stats.add_measurements(&measurements);
+                    
+                    // Log hourly statistics
+                    let now = chrono::Local::now();
+                    if now.signed_duration_since(last_stats_log).num_minutes() >= 60 {
+                        hourly_stats.log_and_reset();
+                        last_stats_log = now;
+                    }
+                } else {
+                    // Normal mode: show every measurement
+                    if let Err(e) = output_handle.update(&measurements) {
+                        error!("Output update failed: {}", e);
+                    }
                 }
             }
             Err(e) => {
@@ -252,5 +276,119 @@ fn parse_duration(s: &str) -> Result<chrono::Duration> {
         Ok(chrono::Duration::minutes(minutes))
     } else {
         anyhow::bail!("Invalid duration format. Use: 24h, 7d, 30m, etc.")
+    }
+}
+
+/// Accumulates measurements for hourly statistics in quiet mode
+struct HourlyStats {
+    measurements_per_target: std::collections::HashMap<String, TargetStats>,
+    total_measurements: usize,
+    failed_measurements: usize,
+}
+
+struct TargetStats {
+    rtts: Vec<f64>,
+    jitters: Vec<f64>,
+    packet_loss_count: usize,
+    success_count: usize,
+}
+
+impl HourlyStats {
+    fn new() -> Self {
+        Self {
+            measurements_per_target: std::collections::HashMap::new(),
+            total_measurements: 0,
+            failed_measurements: 0,
+        }
+    }
+    
+    fn add_measurements(&mut self, measurements: &[testing::Measurement]) {
+        for m in measurements {
+            self.total_measurements += 1;
+            
+            let target_stats = self.measurements_per_target
+                .entry(m.target.clone())
+                .or_insert_with(|| TargetStats {
+                    rtts: Vec::new(),
+                    jitters: Vec::new(),
+                    packet_loss_count: 0,
+                    success_count: 0,
+                });
+            
+            if m.status == "success" {
+                target_stats.success_count += 1;
+                if let Some(rtt) = m.rtt_ms {
+                    target_stats.rtts.push(rtt);
+                }
+                if let Some(jitter) = m.jitter_ms {
+                    target_stats.jitters.push(jitter);
+                }
+            } else {
+                target_stats.packet_loss_count += 1;
+                self.failed_measurements += 1;
+            }
+        }
+    }
+    
+    fn log_and_reset(&mut self) {
+        if self.total_measurements == 0 {
+            info!("Hourly stats: No measurements");
+            return;
+        }
+        
+        info!("═══ Hourly Statistics ═══");
+        info!("Total measurements: {} (failed: {})", 
+              self.total_measurements, self.failed_measurements);
+        
+        for (target, stats) in &self.measurements_per_target {
+            if stats.success_count == 0 {
+                info!("  {}: NO SUCCESSFUL MEASUREMENTS ({}% loss)",
+                      target,
+                      stats.packet_loss_count * 100 / (stats.success_count + stats.packet_loss_count));
+                continue;
+            }
+            
+            let total_tests = stats.success_count + stats.packet_loss_count;
+            let loss_pct = if total_tests > 0 {
+                (stats.packet_loss_count as f64 / total_tests as f64) * 100.0
+            } else {
+                0.0
+            };
+            
+            // Calculate RTT statistics
+            let (min_rtt, max_rtt, avg_rtt, p95_rtt) = if !stats.rtts.is_empty() {
+                let mut sorted_rtts = stats.rtts.clone();
+                sorted_rtts.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                
+                let min = sorted_rtts[0];
+                let max = sorted_rtts[sorted_rtts.len() - 1];
+                let avg = sorted_rtts.iter().sum::<f64>() / sorted_rtts.len() as f64;
+                let p95_idx = (sorted_rtts.len() as f64 * 0.95) as usize;
+                let p95 = sorted_rtts.get(p95_idx).copied().unwrap_or(max);
+                
+                (min, max, avg, p95)
+            } else {
+                (0.0, 0.0, 0.0, 0.0)
+            };
+            
+            // Calculate jitter statistics
+            let avg_jitter = if !stats.jitters.is_empty() {
+                stats.jitters.iter().sum::<f64>() / stats.jitters.len() as f64
+            } else {
+                0.0
+            };
+            
+            info!("  {}: {} tests, {:.1}% loss", target, total_tests, loss_pct);
+            info!("    RTT: min={:.2}ms avg={:.2}ms max={:.2}ms p95={:.2}ms",
+                  min_rtt, avg_rtt, max_rtt, p95_rtt);
+            info!("    Jitter: avg={:.2}ms", avg_jitter);
+        }
+        
+        info!("═══════════════════════");
+        
+        // Reset
+        self.measurements_per_target.clear();
+        self.total_measurements = 0;
+        self.failed_measurements = 0;
     }
 }

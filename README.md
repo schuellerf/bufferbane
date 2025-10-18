@@ -28,6 +28,7 @@ Bufferbane is a high-precision network monitoring tool designed to detect fine-g
 ✅ **Visual Chart Export**
 - **Static PNG** charts with min/max/avg/P95/P99 lines
 - **Interactive HTML** charts with hover tooltips (NEW! ✨)
+- **Gap detection**: Lines break when data gap > 5 minutes (shows monitoring downtime)
 - Shaded variance areas
 - Multiple targets on same plot
 - Large, readable fonts for accessibility
@@ -58,38 +59,57 @@ Bufferbane is a high-precision network monitoring tool designed to detect fine-g
 - **Linux** (for ICMP - requires `CAP_NET_RAW` capability)
 - **SQLite 3.x** (bundled with rusqlite)
 
-### Installation
+### Installation (Recommended - Systemd Service)
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/schuellerf/bufferbane.git
 cd bufferbane
 
-# Build release binary
+# Build and install
+sudo make install
+
+# Create configuration
+sudo mkdir -p /etc/bufferbane
+sudo cp /usr/local/share/bufferbane/client.conf.template /etc/bufferbane/client.conf
+sudo nano /etc/bufferbane/client.conf
+
+# Install and start service (runs in quiet mode with hourly stats)
+sudo make install-service
+sudo systemctl enable --now bufferbane
+
+# View logs
+sudo journalctl -u bufferbane -f
+```
+
+### Development / Manual Build
+
+```bash
+# Clone and build
+git clone https://github.com/schuellerf/bufferbane.git
+cd bufferbane
 cargo build --release
 
-# Set ICMP capability (required for ICMP ping)
-sudo setcap cap_net_raw+ep ./target/release/bufferbane
+# Configure
+cp client.conf.template client.conf
+nano client.conf
 
-# Or run with sudo
-sudo ./target/release/bufferbane
+# Run locally (shows every ping)
+./target/release/bufferbane --config client.conf
+
+# Run in quiet mode (hourly statistics, like systemd service)
+./target/release/bufferbane --config client.conf --quiet
 ```
 
 ### Configuration
 
-```bash
-# Copy template to create your config
-cp client.conf.template client.conf
-
-# Edit configuration (optional - defaults work out of the box)
-vim client.conf
-```
-
 Key configuration options:
 - **Test interval**: How often to ping (default: 1000ms)
 - **Database path**: Where to store measurements (default: `./bufferbane.db`)
-- **Targets**: Public DNS servers (default: 8.8.8.8, 1.1.1.1)
+- **Targets**: Public DNS servers (default: 8.8.8.8, 1.1.1.1, dns.google)
 - **Alert thresholds**: Latency, jitter, packet loss limits
+
+📖 **Full installation guide**: See **[INSTALL.md](INSTALL.md)** for detailed instructions, troubleshooting, and advanced configuration.
 
 ### Usage
 

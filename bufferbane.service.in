@@ -1,0 +1,65 @@
+# Bufferbane Network Quality Monitoring Service
+# This file is a template - do not edit manually
+# Use 'sudo make install-service' to install
+
+[Unit]
+Description=Bufferbane Network Quality Monitoring
+Documentation=https://github.com/schuellerf/bufferbane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# User to run as (set during installation)
+User=@INSTALL_USER@
+
+# Working directory (user's home for database storage)
+WorkingDirectory=@USER_HOME@/.local/share/bufferbane
+
+# Create working directory if it doesn't exist
+ExecStartPre=/usr/bin/mkdir -p @USER_HOME@/.local/share/bufferbane
+ExecStartPre=/usr/bin/chown @INSTALL_USER@ @USER_HOME@/.local/share/bufferbane
+
+# Run in quiet mode for systemd (logs hourly stats instead of every ping)
+ExecStart=@BINDIR@/bufferbane --config /etc/bufferbane/client.conf --quiet
+
+# Restart policy
+Restart=always
+RestartSec=10
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Capabilities for ICMP (raw sockets)
+# This allows the service to run without sudo
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@USER_HOME@/.local/share/bufferbane
+
+# Additional security options
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bufferbane
+
+[Install]
+WantedBy=multi-user.target
+

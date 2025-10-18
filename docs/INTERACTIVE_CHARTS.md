@@ -96,12 +96,16 @@ These statistics are calculated client-side from the data.
 - **Color palette**: Professional blues, greens, reds, oranges
 - **Responsive canvas**: 1200x600px chart area
 
-### 4. Data Points
+### 4. Data Points & Gap Handling
 
 - **Line thickness**: 3px for clear visibility
 - **Smooth rendering**: HTML5 Canvas for performance
 - **Multiple targets**: Each target gets a unique color
 - **Time formatting**: Adaptive (HH:MM on axis, full datetime in tooltips)
+- **Gap detection**: Lines automatically break when there's a gap > 5 minutes
+  - Makes it obvious when monitoring wasn't running
+  - Prevents misleading connections across downtime periods
+  - Applies to both PNG and HTML charts
 
 ---
 
@@ -299,6 +303,28 @@ These statistics are calculated client-side from the data.
 │ └──────────────┘ └──────────────┘              │
 └────────────────────────────────────────────────┘
 ```
+
+### Gap Handling Example
+
+When monitoring stops (app crashed, system reboot, etc.), gaps are clearly visible:
+
+```
+Latency (ms)
+    30 ─  
+       │         ╱╲                    ╱──╲
+    20 ─      ╱──  ──╲              ╱──    ──╲
+       │   ╱──        ──╲        ╱──          ──╲
+    10 ─╱──              ──    ──               ──
+       │                   (gap)
+     0 ─└─────────────────────────────────────────
+        08:00   09:00   10:00   11:00   12:00
+        
+        ← continuous → | ← 20min gap → | ← continuous →
+                       (no data here)
+```
+
+**Before (problematic)**: Line connected across gaps, making it look like latency slowly increased
+**After (correct)**: Line breaks show exactly when monitoring stopped and resumed
 
 ---
 
