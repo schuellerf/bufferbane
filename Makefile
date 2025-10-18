@@ -101,6 +101,21 @@ clean-data:
 	@echo "  - ~/.local/share/bufferbane/"
 	@echo "  - /etc/bufferbane/"
 
+# Generate PNG chart (last 24 hours)
+chart:
+	@echo "Generating PNG chart (last 24h)..."
+	./target/release/bufferbane --chart --last 24h
+
+# Generate interactive HTML chart (last 24 hours)
+chart-interactive:
+	@echo "Generating interactive HTML chart (last 24h)..."
+	./target/release/bufferbane --chart --interactive --last 24h
+
+# Export to CSV (last 24 hours)
+export:
+	@echo "Exporting to CSV (last 24h)..."
+	./target/release/bufferbane --export --last 24h --output export_$(shell date +%Y%m%d_%H%M%S).csv
+
 # Install binary and config template
 install: build
 	@echo "Installing Bufferbane..."
@@ -252,6 +267,11 @@ help:
 	@echo "  make test               Run tests"
 	@echo "  make clean              Clean build artifacts"
 	@echo "  make clean-data         Clean generated data (db, charts, exports, logs)"
+	@echo ""
+	@echo "  make chart              Generate PNG chart (last 24h)"
+	@echo "  make chart-interactive  Generate HTML chart (last 24h)"
+	@echo "  make export             Export to CSV (last 24h)"
+	@echo ""
 	@echo "  make install            Install binaries and config templates"
 	@echo "  make install-service    Install systemd service (requires root)"
 	@echo "  make uninstall-service  Uninstall systemd service (requires root)"

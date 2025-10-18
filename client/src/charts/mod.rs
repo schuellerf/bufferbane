@@ -270,6 +270,9 @@ fn calculate_statistics(values: &[f64]) -> Statistics {
     }
 }
 
+/// Load and process HTML template for interactive charts
+const INTERACTIVE_TEMPLATE: &str = include_str!("../templates/interactive_chart.html");
+
 /// Generate interactive HTML chart with hover tooltips
 pub fn generate_interactive_chart(
     measurements: &[Measurement],
@@ -465,15 +468,33 @@ pub fn generate_interactive_chart(
         .collect();
     let colors_str = format!("[{}]", colors_json.join(", "));
     
-    // Generate HTML
-    let html = format!(r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bufferbane - Latency Chart</title>
-    <style>
-        body {{
+    // Format time range for display
+    let start_time = chrono::DateTime::from_timestamp(min_time, 0)
+        .unwrap()
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let end_time = chrono::DateTime::from_timestamp(max_time, 0)
+        .unwrap()
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    
+    // Generate HTML from template
+    let html = INTERACTIVE_TEMPLATE
+        .replace("{{START_TIME}}", &start_time)
+        .replace("{{END_TIME}}", &end_time)
+        .replace("{{DATA_JSON}}", &data_json)
+        .replace("{{COLORS_JSON}}", &colors_str)
+        .replace("{{MIN_TIME}}", &min_time.to_string())
+        .replace("{{MAX_TIME}}", &max_time.to_string())
+        .replace("{{MIN_RTT}}", &format!("{:.2}", y_min))
+        .replace("{{MAX_RTT}}", &format!("{:.2}", y_max));
+    
+    std::fs::write(output_path, html)?;
+    
+    Ok(())
+}
+
+
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 20px;
             background: #f5f5f5;

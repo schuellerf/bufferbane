@@ -16,7 +16,7 @@ stats.json
 *.csv
 *.json
 *.png
-*.html
+/*.html
 
 # Build artifacts (Rust)
 target/
