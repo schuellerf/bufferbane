@@ -1,6 +1,8 @@
 # Actual configuration files (contain secrets)
 client.conf
 server.conf
+*.conf.backup
+*~
 
 # Database files
 *.db
