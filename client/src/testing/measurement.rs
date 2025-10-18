@@ -92,6 +92,41 @@ impl Measurement {
         }
     }
     
+    pub fn new_server_echo(
+        target: String,
+        interface: String,
+        connection_type: String,
+    ) -> Self {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        
+        let monotonic_ns = std::time::Instant::now().elapsed().as_nanos();
+        
+        Self {
+            timestamp,
+            monotonic_ns,
+            interface,
+            connection_type,
+            test_type: "server_echo".to_string(),
+            target,
+            server_name: None,
+            rtt_ms: None,
+            jitter_ms: None,
+            packet_loss_pct: None,
+            throughput_kbps: None,
+            dns_time_ms: None,
+            status: "pending".to_string(),
+            error_detail: None,
+            upload_latency_ms: None,
+            download_latency_ms: None,
+            server_processing_us: None,
+        }
+    }
+    
     pub fn set_success(&mut self, rtt_ms: f64) {
         self.rtt_ms = Some(rtt_ms);
         self.status = "success".to_string();

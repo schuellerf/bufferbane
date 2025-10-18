@@ -194,18 +194,48 @@ impl ServerTester {
         
         // Ensure we're authenticated
         if self.session_id.is_none() {
-            self.authenticate()?;
+            if let Err(e) = self.authenticate() {
+                // Authentication failed - create error measurement
+                let mut measurement = Measurement::new_server_echo(
+                    self.config.host.clone(),
+                    self.interface.clone(),
+                    self.connection_type.clone(),
+                );
+                measurement.set_error(format!("Authentication failed: {}", e));
+                return Ok(vec![measurement]);
+            }
         }
         
         // Increment sequence number
         self.sequence += 1;
+        
+        // Create measurement (will be updated based on test result)
+        let mut measurement = Measurement::new_server_echo(
+            self.config.host.clone(),
+            self.interface.clone(),
+            self.connection_type.clone(),
+        );
         
         // Send echo request
         let start_time = SystemTime::now();
         let echo_request = EchoRequestPayload::new(self.sequence);
         let request_timestamp = echo_request.client_timestamp;
         
-        let reply = self.send_echo_request(&echo_request)?;
+        let reply = match self.send_echo_request(&echo_request) {
+            Ok(r) => r,
+            Err(e) => {
+                // Check if it's a timeout or other error
+                let error_msg = e.to_string();
+                if error_msg.contains("timeout") || error_msg.contains("timed out") {
+                    measurement.set_timeout();
+                    debug!("Server {} -> timeout", self.config.host);
+                } else {
+                    measurement.set_error(error_msg.clone());
+                    debug!("Server {} -> error: {}", self.config.host, error_msg);
+                }
+                return Ok(vec![measurement]);
+            }
+        };
         
         let end_time = SystemTime::now();
         let client_recv_ns = end_time
@@ -282,29 +312,19 @@ impl ServerTester {
             );
         }
         
-        // Create measurement
-        let measurement = Measurement {
-            timestamp: start_time
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64,
-            monotonic_ns: request_timestamp as u128,
-            interface: self.interface.clone(),
-            connection_type: self.connection_type.clone(),
-            test_type: "server_echo".to_string(),
-            target: self.config.host.clone(),
-            server_name: Some(self.config.host.clone()),
-            rtt_ms: Some(rtt),
-            jitter_ms: None, // TODO: Calculate jitter
-            packet_loss_pct: Some(0.0), // Successful = 0% loss
-            throughput_kbps: None,
-            dns_time_ms: None,
-            status: "success".to_string(),
-            error_detail: None,
-            upload_latency_ms: Some(upload_latency_ms),
-            download_latency_ms: Some(download_latency_ms),
-            server_processing_us: Some(server_processing_us),
-        };
+        // Update measurement with success data
+        measurement.timestamp = start_time
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        measurement.monotonic_ns = request_timestamp as u128;
+        measurement.server_name = Some(self.config.host.clone());
+        measurement.rtt_ms = Some(rtt);
+        measurement.packet_loss_pct = Some(0.0); // Successful = 0% loss
+        measurement.status = "success".to_string();
+        measurement.upload_latency_ms = Some(upload_latency_ms);
+        measurement.download_latency_ms = Some(download_latency_ms);
+        measurement.server_processing_us = Some(server_processing_us);
         
         debug!(
             "Server ECHO test completed: target={}, rtt={:.2}ms, upload={:.2}ms, download={:.2}ms, processing={}μs, offset={:.2}ms, seq={}",
