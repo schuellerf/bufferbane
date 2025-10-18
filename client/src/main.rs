@@ -112,21 +112,18 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     db.initialize()?;
     info!("Database initialized");
     
-    // Auto-detect gateway if enabled
-    let detected_gateway = if config.monitoring.auto_detect_gateway {
-        match network_monitor::detect_default_gateway() {
-            Ok(gateway) => {
-                info!("Auto-detected gateway: {}", gateway);
-                Some(gateway)
-            }
-            Err(e) => {
-                warn!("Failed to auto-detect gateway: {}", e);
-                None
-            }
-        }
+    // Initialize gateway monitor if enabled
+    let mut gateway_monitor = if config.monitoring.auto_detect_gateway {
+        let mut monitor = network_monitor::GatewayMonitor::new();
+        // Check immediately on startup
+        let detected_gateway = monitor.check();
+        info!("Gateway monitoring enabled (check interval: {}s)", config.monitoring.gateway_check_interval_sec);
+        Some(monitor)
     } else {
         None
     };
+    
+    let detected_gateway = gateway_monitor.as_ref().and_then(|m| m.get_current_gateway());
     
     // Initialize public IP monitor
     let mut ip_monitor = if config.monitoring.monitor_public_ip {
@@ -142,7 +139,7 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     
     // Initialize ICMP tester with optional gateway
     let config_arc = std::sync::Arc::new(config.clone());
-    let tester = if let Some(gateway) = detected_gateway {
+    let mut tester = if let Some(gateway) = detected_gateway {
         info!("Adding detected gateway {} to test targets", gateway);
         testing::IcmpTester::new_with_additional_targets(config_arc.clone(), vec![gateway])?
     } else {
@@ -204,8 +201,9 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     let mut hourly_stats = HourlyStats::new();
     let mut last_stats_log = chrono::Local::now();
     
-    // Track last IP check time
+    // Track last IP and gateway check times
     let mut last_ip_check = chrono::Local::now();
+    let mut last_gateway_check = chrono::Local::now();
     
     // Check public IP immediately on startup
     if let Some(ref mut monitor) = ip_monitor {
@@ -232,6 +230,34 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     
     loop {
         interval.tick().await;
+        
+        // Check gateway periodically
+        if let Some(ref mut monitor) = gateway_monitor {
+            let now = chrono::Local::now();
+            let elapsed = (now - last_gateway_check).num_seconds() as u64;
+            
+            if elapsed >= config.monitoring.gateway_check_interval_sec {
+                if let Some((old_gateway, new_gateway)) = monitor.check() {
+                    // Update ICMP tester with new gateway
+                    tester.update_gateway(new_gateway);
+                    
+                    let message = if let Some(old) = old_gateway {
+                        format!("Gateway changed: {} -> {} (ISP failover?)", old, new_gateway)
+                    } else {
+                        format!("Gateway detected: {}", new_gateway)
+                    };
+                    let _ = db.store_event(
+                        "gateway_change",
+                        &new_gateway.to_string(),
+                        "info",
+                        &message,
+                        None,
+                        None,
+                    );
+                }
+                last_gateway_check = now;
+            }
+        }
         
         // Check public IP periodically
         if let Some(ref mut monitor) = ip_monitor {

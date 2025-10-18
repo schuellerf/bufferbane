@@ -81,6 +81,24 @@ impl IcmpTester {
         })
     }
     
+    /// Update gateway target (for dynamic gateway changes)
+    /// Replaces first target if it's a private IP (assumed to be gateway)
+    /// Or adds as first target if no private IP exists
+    pub fn update_gateway(&mut self, new_gateway: IpAddr) {
+        // Check if first target is a private IP (likely gateway)
+        if let Some(first) = self.targets.first() {
+            if is_private_ip(first) {
+                debug!("Updating gateway target: {} -> {}", first, new_gateway);
+                self.targets[0] = new_gateway;
+                return;
+            }
+        }
+        
+        // No private IP found, add gateway as first target
+        debug!("Adding new gateway target: {}", new_gateway);
+        self.targets.insert(0, new_gateway);
+    }
+    
     pub async fn run_tests(&self) -> Result<Vec<Measurement>> {
         let mut measurements = Vec::new();
         
@@ -133,6 +151,18 @@ impl IcmpTester {
             Err(_) => {
                 anyhow::bail!("Ping timeout after {:?}", timeout)
             }
+        }
+    }
+}
+
+/// Check if an IP address is private/local
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => {
+            ipv4.is_private() || ipv4.is_loopback() || ipv4.is_link_local()
+        }
+        IpAddr::V6(ipv6) => {
+            ipv6.is_loopback() || ipv6.is_unique_local()
         }
     }
 }

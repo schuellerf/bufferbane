@@ -246,7 +246,14 @@ max_files = 5                   # Keep this many old log files
 # Auto-detect ISP gateway (default route)
 # If enabled, the client will detect your default gateway using 'ip route'
 # and automatically add it to the ICMP test targets
+# Gateway is monitored for changes (e.g., ISP failover, UniFi USG failover)
 auto_detect_gateway = true
+
+# Gateway check interval (seconds)
+# How often to check if the gateway has changed
+# Useful for UniFi USG or other routers with failover ISP connections
+# Default: 60 seconds (1 minute)
+gateway_check_interval_sec = 60
 
 # Monitor public IP address
 # Tracks your public IP address and creates events when it changes

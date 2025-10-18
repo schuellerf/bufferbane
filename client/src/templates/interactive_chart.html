@@ -141,6 +141,9 @@
             <span style="margin-left: 20px;">
                 <span style="color: #2E86DE; font-weight: bold;">▼</span> IP Change
             </span>
+            <span style="margin-left: 20px;">
+                <span style="color: #9B59B6; font-weight: bold;">▼</span> Gateway Change
+            </span>
         </div>
         
         <div class="chart-container">
@@ -419,6 +422,8 @@
                     color = '#8B0000'; // Dark red
                 } else if (event.type === 'ip_change') {
                     color = '#2E86DE'; // Blue
+                } else if (event.type === 'gateway_change') {
+                    color = '#9B59B6'; // Purple
                 } else {
                     color = '#888888'; // Gray
                 }
@@ -479,6 +484,8 @@
                     color = '#8B0000';
                 } else if (event.type === 'ip_change') {
                     color = '#2E86DE';
+                } else if (event.type === 'gateway_change') {
+                    color = '#9B59B6';
                 } else {
                     color = '#888888';
                 }
@@ -568,7 +575,8 @@
                         const eventTime = formatTime(event.timestamp);
                         const icon = event.type === 'high_latency' ? '⏱️' : 
                                     event.type === 'packet_loss' ? '📉' :
-                                    event.type === 'ip_change' ? '🌐' : '❌';
+                                    event.type === 'ip_change' ? '🌐' :
+                                    event.type === 'gateway_change' ? '🚪' : '❌';
                         tooltipHtml += `${icon} ${eventTime}: ${event.message}<br>`;
                     });
                 }
