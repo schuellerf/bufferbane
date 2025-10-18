@@ -27,12 +27,13 @@ Bufferbane is a high-precision network monitoring tool designed to detect fine-g
 
 ✅ **Visual Chart Export**
 - **Static PNG** charts with min/max/avg/P95/P99 lines
-- **Interactive HTML** charts with hover tooltips (NEW! ✨)
+- **Interactive HTML** charts with hover tooltips and detailed statistics
+- **Windowed aggregation**: 100 segments (default, configurable via `--segments`)
 - **Gap detection**: Lines break when data gap > 5 minutes (shows monitoring downtime)
-- Shaded variance areas
+- **Shaded variance areas**: Visual representation of min/max spread
 - Multiple targets on same plot
 - Large, readable fonts for accessibility
-- Configurable size and style
+- Configurable detail level (50-500+ segments)
 
 ✅ **CSV Data Export**
 - Flexible time range selection (`--last 24h`, `--start`/`--end`)

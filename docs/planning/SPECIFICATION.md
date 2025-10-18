@@ -515,6 +515,7 @@ Single chart showing latency over time with statistical visualization:
 - **Avg line**: Average latency (bold, primary metric)
 - **P95/P99 lines**: 95th and 99th percentile (dashed lines)
 - **Shaded area**: Light fill between min and max (shows variance)
+- **Gap detection**: Lines break when data gap exceeds 5 minutes (clearly shows monitoring downtime)
 - **Multiple targets**: Color-coded lines for each target
 - Export as PNG (1920x1080, configurable) or HTML (interactive)
 
