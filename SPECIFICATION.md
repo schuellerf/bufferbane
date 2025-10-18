@@ -499,19 +499,63 @@ bufferbane export --format json --last 7d --output data.json
 - Nested format for easy parsing
 
 **Chart Export** (Visual Analysis):
+
+**Phase 1: Basic Time Series Chart**
 ```bash
-# Generate all default charts for last 24 hours
+# Generate basic latency chart (available in Phase 1)
+bufferbane chart --last 24h --output latency.png
+```
+
+Single chart showing latency over time with statistical visualization:
+- **Min line**: Minimum latency (lower bound, thin line)
+- **Max line**: Maximum latency (upper bound, thin line)
+- **Avg line**: Average latency (bold, primary metric)
+- **P95/P99 lines**: 95th and 99th percentile (dashed lines)
+- **Shaded area**: Light fill between min and max (shows variance)
+- **Multiple targets**: Color-coded lines for each target
+- Export as PNG (1920x1080, configurable)
+
+**Example visual layout**:
+```
+Latency Over Time (Last 24 Hours)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Latency (ms)
+100 ┤                            ╭─╮ Max
+ 90 ┤                          ╭─╯ ╰─╮
+ 80 ┤                        ╭─╯     ╰─╮
+ 70 ┤                      ╭─╯         ╰─╮
+ 60 ┤                    ╭─╯             ╰─╮
+ 50 ┤    ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ P99
+ 40 ┤   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄    P95
+ 30 ┤  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  Avg (bold)
+ 20 ┤ [████████ Shaded area shows variance ████████]
+ 10 ┤ ─────────────────────────────────────────── Min
+  0 └┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬
+    00:00 04:00 08:00 12:00 16:00 20:00 24:00
+    
+Legend:
+  8.8.8.8 (Google)  ━━━ (blue)
+  1.1.1.1 (Cloudflare) ─── (green)
+  ISP Gateway ─·─·─ (orange)
+```
+
+**Purpose**: Immediately visualize latency patterns and variance without needing external tools.
+
+**Phase 4: Advanced Charts**
+```bash
+# Generate all advanced charts (Phase 4)
 bufferbane charts --last 24h --output-dir ./charts
 
 # Generate specific chart
 bufferbane chart latency_over_time --interface wlan0 --last 7d --output latency.png
 ```
 
-**Available Chart Types**:
+**Available Chart Types (Phase 4)**:
 
-1. **latency_over_time**: Line chart showing RTT over time
-   - Multiple targets on same plot
-   - Color-coded by target
+1. **latency_over_time**: Enhanced line chart with interface comparison
+   - Multiple targets and interfaces on same plot
+   - Color-coded by target and interface
    - Shaded regions for jitter
    
 2. **jitter_over_time**: Jitter (latency variation) over time
@@ -544,7 +588,7 @@ bufferbane chart latency_over_time --interface wlan0 --last 7d --output latency.
    - Scatter plot or before/after comparison
    - Shows bufferbloat severity
 
-**Chart Configuration**:
+**Chart Configuration** (Phase 1):
 ```toml
 [export]
 enable_charts = true
@@ -552,6 +596,9 @@ chart_width = 1920
 chart_height = 1080
 chart_dpi = 100
 chart_style = "darkgrid"  # darkgrid, whitegrid, dark, white
+
+# Phase 1: Basic time series chart
+# Phase 4: All advanced chart types
 ```
 
 **Chart Library**: Uses `plotters` Rust crate for PNG generation
@@ -559,6 +606,7 @@ chart_style = "darkgrid"  # darkgrid, whitegrid, dark, white
 - Fast rendering
 - High-quality output
 - Customizable styles
+- Available from Phase 1 for basic charts
 
 **Summary Report** (Human-Readable):
 ```bash

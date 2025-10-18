@@ -196,7 +196,7 @@ use_colors = true
 # Export formats to enable
 enable_csv = true              # CSV for spreadsheet analysis
 enable_json = true             # JSON for programmatic analysis
-enable_charts = true           # PNG charts for visualization
+enable_charts = true           # PNG charts for visualization (Phase 1: basic chart)
 
 # Chart generation settings (requires enable_charts = true)
 chart_width = 1920             # Chart width in pixels
@@ -207,15 +207,19 @@ chart_style = "darkgrid"       # Style: "darkgrid", "whitegrid", "dark", "white"
 # Default export path (used by CLI export command)
 export_directory = "./exports"
 
-# Chart types to generate by default
+# Phase 1: Basic chart
+#   - latency_over_time with min/max/avg/P95/P99 lines and shaded area
+#   - Command: bufferbane chart --last 24h --output latency.png
+#
+# Phase 4: Advanced chart types (all options below)
 default_charts = [
-    "latency_over_time",       # Line chart: latency vs time
-    "jitter_over_time",        # Line chart: jitter vs time
-    "packet_loss_over_time",   # Line chart: packet loss % vs time
-    "throughput_over_time",    # Line chart: upload/download speed vs time
-    "latency_distribution",    # Histogram: latency distribution
-    "connection_comparison",   # Bar chart: compare interfaces/connections
-    "daily_heatmap",          # Heatmap: quality by hour of day
+    "latency_over_time",       # Line chart: latency vs time (Phase 1 basic + Phase 4 advanced)
+    "jitter_over_time",        # Line chart: jitter vs time (Phase 4)
+    "packet_loss_over_time",   # Line chart: packet loss % vs time (Phase 4)
+    "throughput_over_time",    # Line chart: upload/download speed vs time (Phase 4)
+    "latency_distribution",    # Histogram: latency distribution (Phase 4)
+    "connection_comparison",   # Bar chart: compare interfaces/connections (Phase 4)
+    "daily_heatmap",          # Heatmap: quality by hour of day (Phase 4)
 ]
 
 [logging]

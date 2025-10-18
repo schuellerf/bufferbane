@@ -47,7 +47,15 @@ Comprehensive evaluation of existing open-source tools:
 - **Tools evaluated**: Smokeping, LibreSpeed, netdata, iperf3, MTR, Gping, Flent, IRTT, NetPerfMeter, and more
 - **Gap analysis**: What exists vs. what's needed
 - **Technology recommendation**: **Rust** selected as optimal choice
-- **Architecture proposal**: Detailed crate recommendations and implementation strategy
+- **Architecture proposal**: Detailed crate recommendations and 4-phase implementation strategy
+
+### 📊 [PHASE_SUMMARY.md](PHASE_SUMMARY.md)
+Quick reference for the 4 implementation phases:
+- **Phase overview**: Effort, features, and use cases for each phase
+- **Feature matrix**: What's included in each phase
+- **Recommended order**: Phase 1 → 2 → 4 (skip 3 initially)
+- **When to stop**: Decision guide for each phase
+- **Dependencies**: Required Rust crates per phase
 
 ### 🔒 [ENCRYPTION_SECURITY.md](ENCRYPTION_SECURITY.md)
 Complete analysis of the encryption and security model:
@@ -116,7 +124,7 @@ Quick reference for server architecture:
 Bufferbane development is organized into 4 major phases:
 
 ### Phase 1: Client Only (1-2 weeks)
-**Goal**: Basic but functional latency monitoring
+**Goal**: Basic but functional latency monitoring with visual output
 
 - Shared protocol library (encryption, packet structures)
 - Client CLI with configuration
@@ -126,10 +134,11 @@ Bufferbane development is organized into 4 major phases:
 - DNS resolution monitoring
 - Alert detection and logging
 - Basic export (CSV, JSON)
+- **Basic chart export (PNG with min/max/avg/percentile lines)**
 
-**✅ Milestone: Immediately useful for latency diagnosis**
+**✅ Milestone: Immediately useful for latency diagnosis with visual proof**
 
-**Capabilities**: Latency, jitter, basic packet loss, DNS monitoring
+**Capabilities**: Latency, jitter, basic packet loss, DNS monitoring, **visual chart export**
 
 ---
 
@@ -187,10 +196,11 @@ Bufferbane development is organized into 4 major phases:
 - Interface-specific alerts
 
 **Export enhancements:**
-- **PNG chart generation** (8 chart types)
+- **Advanced chart types** (extends Phase 1 basic chart to 8 total types)
 - Comprehensive reporting (Markdown, HTML)
 - Interface comparison visualizations
 - Heatmaps for time-of-day patterns
+- Batch chart generation
 
 **✅ Milestone: Complete solution with all advanced features**
 
@@ -310,6 +320,7 @@ bufferbane/
 │   ├── SPECIFICATION.md     # Technical specification
 │   ├── SCENARIOS.md         # Network scenarios
 │   ├── RESEARCH.md          # Technology research
+│   ├── PHASE_SUMMARY.md     # 4-phase implementation guide
 │   ├── ENCRYPTION_SECURITY.md # Encryption analysis
 │   ├── MULTI_INTERFACE.md   # Multi-interface monitoring
 │   ├── SERVER_COMPONENT.md  # Server quick reference
@@ -395,7 +406,9 @@ See template files for complete documentation of all options.
 
 ## License
 
-To be determined based on implementation.
+MIT License - See [LICENSE](LICENSE) file for details.
+
+This project is open source and freely available for use, modification, and distribution.
 
 ## Contributing
 
@@ -407,11 +420,11 @@ This is currently in the planning phase. Once implementation begins, contributio
 
 This project provides a complete specification for building a professional-grade network monitoring solution specifically designed for diagnosing cable internet issues. The 4-phase architecture enables:
 
-- **Phase 1 - Basic monitoring** (standalone): Latency, jitter, basic packet loss via ICMP
+- **Phase 1 - Basic monitoring** (standalone): Latency, jitter, basic packet loss via ICMP, **visual chart export**
 - **Phase 2 - Advanced monitoring** (with server): Throughput testing, bufferbloat detection, detailed packet loss analysis
 - **Phase 3 - Geographic diversity** (multiple servers): Routing issue detection, redundancy
-- **Phase 4 - Multi-interface** (WiFi + Ethernet): **Simultaneous testing** to isolate WiFi vs ISP issues
-- **Comprehensive export**: CSV, JSON, PNG charts (8 chart types), HTML reports
+- **Phase 4 - Multi-interface** (WiFi + Ethernet): **Simultaneous testing** to isolate WiFi vs ISP issues, advanced charts
+- **Visual export**: Phase 1 includes basic PNG chart (min/max/avg/percentile lines), Phase 4 adds 7 more chart types + HTML reports
 - **Simple security**: Port knocking + ChaCha20-Poly1305 encryption avoids complex authentication
 - **Privacy**: All payloads encrypted, pattern analysis resistance
 - **Production-ready**: Designed for 24/7 operation with low resource usage
@@ -431,6 +444,7 @@ The planning phase is complete with detailed specifications for:
 - `SPECIFICATION.md` - Complete technical specification (1115+ lines)
 - `SCENARIOS.md` - Network instability scenarios (584 lines)
 - `RESEARCH.md` - Open source tools research and phases (905+ lines)
+- `PHASE_SUMMARY.md` - Quick reference for 4 implementation phases (370 lines)
 - `ENCRYPTION_SECURITY.md` - Encryption and security analysis (428 lines)
 - `MULTI_INTERFACE.md` - Multi-interface monitoring (Phase 4) (515 lines)
 - `SERVER_COMPONENT.md` - Server quick reference (397 lines)
@@ -445,5 +459,5 @@ The planning phase is complete with detailed specifications for:
 **Version**: 3.0 (Planning Documentation - Multi-Interface + Export)  
 **Architecture**: Client-Server (4 phases: standalone → +server → +multi-server → +multi-interface)  
 **Database**: SQLite (simpler, more flexible than RRD)  
-**Total Documentation**: ~4650+ lines across 9 files
+**Total Documentation**: ~5020+ lines across 10 files
 

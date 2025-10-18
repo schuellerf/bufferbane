@@ -736,7 +736,7 @@ matplotlib      # Graphs
 Bufferbane will be developed in 4 major phases, each building on the previous:
 
 ### Phase 1: Client Only (Standalone Mode)
-**Goal**: Basic but functional latency monitoring
+**Goal**: Basic but functional latency monitoring with visual output
 
 **Deliverables:**
 1. Shared protocol library (packet structures, encryption)
@@ -747,17 +747,26 @@ Bufferbane will be developed in 4 major phases, each building on the previous:
 6. DNS resolution monitoring
 7. Alert detection and logging
 8. Basic export (CSV, JSON)
+9. **Basic chart export** (PNG time series with min/max/avg/percentile lines)
 
 **Capabilities:**
 - ✅ Latency monitoring (RTT, jitter)
 - ✅ Basic packet loss detection (ICMP)
 - ✅ DNS monitoring
 - ✅ Historical data storage
+- ✅ **Visual chart export** (latency over time with statistics)
 - ❌ No throughput testing
 - ❌ No bufferbloat detection
 
+**Chart Features (Phase 1)**:
+- Line chart showing latency over time
+- Min, max, avg, P95, P99 lines
+- Shaded area between min/max (variance visualization)
+- Multiple targets on same plot
+- PNG export (1920x1080)
+
 **Estimated effort**: 1-2 weeks  
-**Status**: Immediately useful for diagnosing latency issues
+**Status**: Immediately useful for diagnosing latency issues with visual proof
 
 ---
 
@@ -841,10 +850,11 @@ Bufferbane will be developed in 4 major phases, each building on the previous:
 7. Interface-specific alerts
 
 **Export enhancements:**
-1. PNG chart generation (plotters crate)
-2. 8 chart types (latency, jitter, throughput, comparison, heatmap, etc.)
+1. **Advanced chart types** (extends Phase 1 basic chart)
+2. 8 total chart types (latency, jitter, throughput, comparison, heatmap, etc.)
 3. Comprehensive reporting (Markdown, HTML)
 4. Interface comparison charts
+5. Multi-chart generation (batch export)
 
 **Capabilities:**
 - ✅ All Phase 3 features
@@ -886,6 +896,7 @@ toml = "0.8"
 clap = { version = "4.4", features = ["derive"] }
 chrono = "0.4"
 anyhow = "1.0"
+plotters = "0.3"  # Chart generation (basic time series)
 ```
 
 ### Phase 2 Additional Dependencies
@@ -900,8 +911,8 @@ dashmap = "5.5"  # Server only
 
 ### Phase 4 Additional Dependencies
 ```toml
-plotters = "0.3"  # Chart generation
 nix = "0.27"  # Interface binding (SO_BINDTODEVICE)
+# Note: plotters is already included from Phase 1
 ```
 
 ---
