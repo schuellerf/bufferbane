@@ -410,7 +410,7 @@ async fn run_chart(config: &config::Config, args: &Args) -> Result<()> {
         info!("Interactive chart saved to {:?}", output_path);
         info!("Open the file in your web browser to view the interactive chart");
     } else {
-        charts::generate_latency_chart(&measurements, &output_path, config, args.segments)?;
+        charts::generate_latency_chart(&measurements, &output_path, config, args.segments, Some(&db))?;
         info!("Chart saved to {:?}", output_path);
     }
     

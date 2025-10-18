@@ -13,6 +13,7 @@ pub fn generate_latency_chart(
     output_path: &Path,
     config: &Config,
     num_segments: usize,
+    db: Option<&crate::storage::Database>,
 ) -> Result<()> {
     if measurements.is_empty() {
         anyhow::bail!("No measurements to chart");
@@ -197,6 +198,47 @@ pub fn generate_latency_chart(
         .border_style(&BLACK)
         .label_font(("sans-serif", 18))  // Larger legend font
         .draw()?;
+    
+    // Draw events if database is available
+    if let Some(database) = db {
+        if let Ok(events) = database.query_events(min_time, max_time) {
+            // Draw event markers
+            for event in events {
+                let event_x = event.timestamp;
+                
+                // Determine color based on event type
+                let color = match event.event_type.as_str() {
+                    "high_latency" => RGBColor(255, 165, 0),      // Orange
+                    "packet_loss" => RGBColor(255, 0, 0),         // Red
+                    "error" => RGBColor(139, 0, 0),               // Dark Red
+                    "ip_change" => RGBColor(46, 134, 222),        // Blue
+                    "gateway_change" => RGBColor(155, 89, 182),   // Purple
+                    _ => RGBColor(136, 136, 136),                 // Gray
+                };
+                
+                // Draw vertical line from top to bottom
+                chart.draw_series(std::iter::once(PathElement::new(
+                    vec![(event_x, y_min), (event_x, y_max)],
+                    ShapeStyle {
+                        color: color.mix(0.3).to_rgba(),
+                        filled: false,
+                        stroke_width: 1,
+                    },
+                )))?;
+                
+                // Draw marker at top
+                chart.draw_series(std::iter::once(Circle::new(
+                    (event_x, y_max - (y_max - y_min) * 0.02),
+                    5,
+                    ShapeStyle {
+                        color: color.mix(0.8).to_rgba(),
+                        filled: true,
+                        stroke_width: 2,
+                    },
+                )))?;
+            }
+        }
+    }
     
     root.present()?;
     
