@@ -140,34 +140,35 @@ dns_servers = ["8.8.8.8", "1.1.1.1"]
 test_domains = ["google.com", "cloudflare.com", "github.com"]
 
 [alerts]
-# Console output: Display alerts in terminal
-console = true
+# Enable alert system
+enabled = true
 
-# File logging: Write alerts to file
-file = true
+# Alert log file path
 log_path = "./alerts.log"
 
-# Alert deduplication window (seconds)
-# Suppress duplicate alerts within this time window
-dedup_window_s = 300            # 5 minutes
+# Latency threshold in milliseconds
+# Alert when RTT exceeds this value
+latency_threshold_ms = 100.0
 
-# Summary: Print ongoing issues summary periodically
-summary_interval_s = 300        # Every 5 minutes
+# Jitter threshold in milliseconds
+# Alert when jitter (latency variation) exceeds this value
+jitter_threshold_ms = 50.0
 
-[data_retention]
+# Packet loss threshold in percentage
+# Alert when packet loss exceeds this percentage
+packet_loss_threshold_pct = 5.0
+
+[retention]
 # How long to keep different types of data
 
 # Raw measurements (per-second data)
-raw_days = 30
+measurements_days = 30
 
-# 1-minute aggregations
-aggregated_1min_days = 90       # ~3 months
-
-# 1-hour aggregations
-aggregated_1hour_days = 365     # 1 year
+# Aggregated data (1-minute and 1-hour rollups)
+aggregations_days = 90
 
 # Events (alerts and detected issues)
-# Events are kept indefinitely by default, set to a number to limit
+# Set to 0 to keep forever
 events_days = 0                 # 0 = keep forever
 
 # Automatic cleanup: Run cleanup job at this time daily (HH:MM format)
@@ -228,11 +229,10 @@ default_charts = [
 # Log level: "trace", "debug", "info", "warn", "error"
 level = "info"
 
-# Log to file
-log_to_file = true
-log_path = "./bufferbane.log"
+# Log file path
+path = "./bufferbane.log"
 
-# Log rotation
-log_rotation_mb = 100           # Rotate when file reaches this size
-log_max_files = 5               # Keep this many old log files
+# Log rotation settings
+max_size_mb = 100               # Rotate when file reaches this size (MB)
+max_files = 5                   # Keep this many old log files
 
