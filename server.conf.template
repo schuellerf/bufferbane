@@ -1,0 +1,224 @@
+# Bufferbane - Server Configuration Template
+#
+# Bufferbane: The bane of bufferbloat
+# Network quality monitoring server
+#
+# Copy this file to server.conf and adjust the values for your setup.
+# server.conf is in .gitignore and will not be committed.
+#
+# Usage: bufferbane-server --config server.conf
+
+[general]
+# Bind address: IP address to listen on
+# "0.0.0.0" = all interfaces, "127.0.0.1" = localhost only
+# Or specify specific interface IP
+bind_address = "0.0.0.0"
+
+# Bind port: UDP port to listen on
+# Must match client configuration
+bind_port = 9876
+
+# Shared secret (64-character hex string, 32 bytes)
+# Generate with: openssl rand -hex 32
+# IMPORTANT: Must match all client configurations exactly
+# Keep this secret secure - it's the only authentication mechanism
+shared_secret = ""
+
+[security]
+# Port knocking configuration
+
+# Timestamp validation: Accept client timestamps within this window
+# Prevents replay attacks while allowing for clock skew
+knock_timeout_window_s = 60     # ±60 seconds
+
+# Session validity: How long a client stays authenticated after knock
+knock_validity_duration_s = 300 # 5 minutes
+
+# Rate limiting per client IP
+max_requests_per_second = 10    # Maximum requests per second per IP
+rate_limit_ban_duration_s = 300 # Ban duration if rate limit exceeded (5 minutes)
+
+# Burst allowance: Allow brief bursts above rate limit
+burst_size = 20                 # Allow up to 20 requests in quick succession
+
+# Client management
+max_concurrent_clients = 50     # Maximum number of authenticated clients
+client_timeout_s = 30           # Remove inactive clients after this time
+session_cleanup_interval_s = 60 # How often to clean up expired sessions
+
+# Failed authentication tracking
+max_auth_failures = 10          # Max failures before temporary IP ban
+auth_failure_window_s = 60      # Count failures within this window
+auth_ban_duration_s = 600       # Ban duration for too many failures (10 minutes)
+
+[tests]
+# Test size limits (prevent abuse)
+
+# Maximum sizes for upload/download tests
+max_upload_size_mb = 100        # Maximum upload test size
+max_download_size_mb = 100      # Maximum download test size
+
+# Maximum test duration (seconds)
+max_test_duration_s = 60        # Reject tests longer than this
+
+# Throughput test settings
+throughput_chunk_size_kb = 64   # Send/receive data in chunks of this size
+throughput_buffer_size_kb = 256 # Socket buffer size
+
+# Echo service settings
+echo_max_payload_size = 1024    # Maximum echo payload size (bytes)
+echo_queue_size = 1000          # Maximum queued echo requests per client
+
+# Bufferbloat test settings
+bufferbloat_max_duration_s = 120    # Maximum bufferbloat test duration
+bufferbloat_concurrent_streams = 4  # Parallel streams during test
+
+[limits]
+# Resource limits to prevent server overload
+
+# Bandwidth limits (kilobits per second)
+# 0 = unlimited, set to limit total server bandwidth
+max_total_bandwidth_kbps = 0    # Total server bandwidth limit
+max_per_client_bandwidth_kbps = 0   # Per-client bandwidth limit
+
+# Memory limits
+max_memory_mb = 512             # Maximum memory usage (approximate)
+max_buffer_memory_mb = 256      # Maximum memory for buffers
+
+# Connection limits
+max_packets_per_second = 10000  # Maximum total packets/second
+max_concurrent_tests = 20       # Maximum concurrent throughput tests
+
+[logging]
+# Server logging configuration
+
+# Log level: "trace", "debug", "info", "warn", "error"
+# "debug" recommended during setup, "info" for production
+level = "info"
+
+# Log to file
+log_to_file = true
+log_path = "./bufferbane_server.log"
+
+# Log rotation
+log_rotation_mb = 100           # Rotate when file reaches this size
+log_max_files = 5               # Keep this many old log files
+
+# Log specific events
+log_auth_attempts = true        # Log authentication attempts (knocks)
+log_auth_failures = true        # Log failed authentication
+log_rate_limits = true          # Log rate limit violations
+log_test_starts = false         # Log when tests start (verbose)
+log_test_completions = true     # Log when tests complete
+
+# Access log: Separate file for client access
+access_log_enabled = true
+access_log_path = "./access.log"
+
+[statistics]
+# Optional: Server-side statistics tracking
+# Note: This adds overhead but provides useful operational metrics
+
+# Enable statistics collection
+track_statistics = true
+
+# Statistics retention window (minutes)
+# Older statistics are discarded
+statistics_window_minutes = 60
+
+# What to track
+track_bandwidth = true          # Track bandwidth usage per client
+track_test_counts = true        # Track test type counts
+track_latencies = true          # Track server-side processing latencies
+track_errors = true             # Track error rates
+
+# Statistics export
+stats_export_interval_s = 300   # Export stats every 5 minutes
+stats_export_path = "./stats.json"  # Export to this file
+
+[performance]
+# Performance tuning options
+
+# Worker threads: Number of threads for handling requests
+# 0 = auto (number of CPU cores)
+worker_threads = 0
+
+# Buffer pool: Pre-allocate buffers for better performance
+buffer_pool_size = 1000         # Number of buffers to pre-allocate
+buffer_pool_buffer_size = 65536 # Size of each buffer (64 KB)
+
+# Socket buffer sizes (OS level)
+socket_recv_buffer_kb = 256     # SO_RCVBUF
+socket_send_buffer_kb = 256     # SO_SNDBUF
+
+# Async runtime configuration
+async_runtime = "tokio"         # Runtime: "tokio" (only option currently)
+blocking_threads = 4            # Threads for blocking operations
+
+[monitoring]
+# Optional: Expose metrics for external monitoring
+
+# Prometheus metrics endpoint (HTTP)
+prometheus_enabled = false
+prometheus_bind = "127.0.0.1:9090"
+prometheus_path = "/metrics"
+
+# Health check endpoint
+healthcheck_enabled = true
+healthcheck_bind = "127.0.0.1:9091"
+healthcheck_path = "/health"
+
+# Status endpoint (JSON stats)
+status_enabled = true
+status_bind = "127.0.0.1:9092"
+status_path = "/status"
+
+[alerts]
+# Server-side alerts (operational issues)
+
+# Enable server-side alerting
+enabled = true
+
+# Alert on high load
+alert_on_high_cpu = true
+cpu_threshold_pct = 90          # Alert if CPU usage exceeds this
+
+alert_on_high_memory = true
+memory_threshold_mb = 450       # Alert if memory exceeds this
+
+alert_on_high_bandwidth = true
+bandwidth_threshold_mbps = 100  # Alert if bandwidth exceeds this
+
+# Alert on errors
+alert_on_high_error_rate = true
+error_rate_threshold_pct = 5    # Alert if error rate exceeds 5%
+
+# Alert destinations
+alert_to_log = true             # Write alerts to log
+alert_to_file = true            # Write alerts to separate file
+alert_file_path = "./server_alerts.log"
+
+# Future: webhook, email, etc.
+# alert_webhook_url = ""
+# alert_email = ""
+
+[development]
+# Development/debugging options
+# Disable in production for security
+
+# Enable debug endpoints (INSECURE: disable in production)
+debug_endpoints = false
+
+# Pretty-print logs (slower but more readable)
+pretty_logs = false
+
+# Verbose packet logging (VERY verbose, debug only)
+log_all_packets = false
+
+# Simulate delays (testing only)
+simulate_latency_ms = 0         # Add artificial latency
+simulate_packet_loss_pct = 0.0  # Simulate packet loss percentage
+
+# Allow connections without authentication (INSECURE: testing only)
+disable_authentication = false
+

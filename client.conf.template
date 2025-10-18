@@ -1,0 +1,234 @@
+# Bufferbane - Client Configuration Template
+#
+# Bufferbane: The bane of bufferbloat
+# Network quality monitoring for cable internet
+#
+# Copy this file to client.conf and adjust the values for your setup.
+# client.conf is in .gitignore and will not be committed.
+#
+# Usage: bufferbane --config client.conf
+
+[general]
+# Test interval in milliseconds (1000 = 1 second)
+test_interval_ms = 1000
+
+# Path to SQLite database for storing measurements
+database_path = "./bufferbane.db"
+
+# Client ID: Auto-generated on first run and saved to database
+# Leave as "auto" unless you want to manually specify (8 random bytes as hex)
+client_id = "auto"
+
+# Network interfaces to monitor (Phase 4: Multi-interface support)
+# Leave empty or comment out to use default interface
+# Specify interface names to test multiple connections simultaneously
+# Example: ["wlan0", "eth0"] tests both WiFi and Ethernet at the same time
+# Each interface gets its own connection_type tag automatically
+interfaces = []  # Empty = use default interface
+
+# Connection type tag (used if single interface or interfaces is empty)
+# Auto-detected from interface name if set to "auto"
+# Manual values: "wifi", "wired", "cellular", "vpn", or custom string
+connection_type = "auto"
+
+[targets]
+# ISP gateway: Auto-detect first hop via traceroute, or specify IP address
+# Examples: "auto", "192.168.1.1", "10.0.0.1"
+isp_gateway = "auto"
+
+# Public DNS servers for latency testing (array of IP addresses)
+# These should be reliable, always-available endpoints
+public_dns = ["8.8.8.8", "1.1.1.1"]
+
+# Custom targets (optional): Additional hosts to monitor
+# Example: ["192.168.1.100", "my-server.example.com"]
+custom = []
+
+# Optional: Server configuration for enhanced testing
+# Set enabled = true to use companion server for throughput and bufferbloat tests
+[server]
+# Enable server-based tests (false = standalone ICMP only, true = full features)
+enabled = false
+
+# Server hostname or IP address
+# Example: "monitor.example.com", "203.0.113.42"
+host = "monitor.example.com"
+
+# Server UDP port (must match server configuration)
+port = 9876
+
+# Shared secret (64-character hex string, 32 bytes)
+# Generate with: openssl rand -hex 32
+# IMPORTANT: Must match the server's shared_secret exactly
+# Leave empty if server.enabled = false
+shared_secret = ""
+
+# Port knocking configuration
+knock_retry_attempts = 3        # Number of knock attempts before giving up
+knock_timeout_ms = 2000         # Timeout for knock response in milliseconds
+
+[thresholds]
+# Latency thresholds in milliseconds
+latency_warning_ms = 50         # Warning if RTT exceeds this to ISP gateway
+latency_critical_ms = 200       # Critical if RTT exceeds this
+latency_public_warning_ms = 100 # Warning threshold for public DNS
+latency_public_critical_ms = 300
+
+# Jitter thresholds in milliseconds (standard deviation of latency)
+jitter_warning_ms = 10          # Warning if jitter exceeds this
+jitter_critical_ms = 30         # Critical if jitter exceeds this
+
+# Packet loss thresholds in percentage (0.0 - 100.0)
+packet_loss_warning_pct = 0.5   # Warning if loss exceeds 0.5%
+packet_loss_critical_pct = 2.0  # Critical if loss exceeds 2%
+
+# Consecutive packet loss: trigger alert if N packets lost in a row
+consecutive_loss_threshold = 5
+
+# Throughput degradation thresholds (percentage of baseline)
+# Example: 80 = alert if speed drops below 80% of baseline
+throughput_warning_pct = 80     # Warning threshold
+throughput_critical_pct = 50    # Critical threshold
+
+# Bufferbloat threshold: latency increase under load (milliseconds)
+bufferbloat_warning_ms = 100    # Warning if latency increases by >100ms
+bufferbloat_critical_ms = 500   # Critical if latency increases by >500ms
+
+[tests.throughput]
+# Enable throughput testing (requires server.enabled = true)
+enabled = true
+
+# Small test: Frequent, low-bandwidth checks
+small_test_kb = 100             # Test size in kilobytes
+small_interval_s = 10           # Interval in seconds
+
+# Medium test: Periodic larger tests
+medium_test_kb = 1000           # 1 MB
+medium_interval_s = 60          # Every minute
+
+# Large test: Occasional full tests (optional, set to 0 to disable)
+large_test_kb = 10000           # 10 MB
+large_interval_s = 300          # Every 5 minutes (0 = disabled)
+
+[tests.bufferbloat]
+# Enable bufferbloat detection tests (requires server.enabled = true)
+# These tests measure latency while bandwidth is saturated
+enabled = true
+
+# How often to run bufferbloat tests (seconds)
+interval_s = 300                # Every 5 minutes
+
+# Test duration (seconds)
+test_duration_s = 60            # Run for 60 seconds
+
+# Test types: "upload", "download", "both"
+test_type = "upload"            # Focus on upload for cable internet
+
+[tests.dns]
+# DNS resolution monitoring
+enabled = true
+
+# How often to test DNS resolution (seconds)
+interval_s = 10
+
+# DNS servers to test (in addition to targets.public_dns for latency)
+# These are queried to test DNS resolution speed
+dns_servers = ["8.8.8.8", "1.1.1.1"]
+
+# Domains to resolve for testing (rotated to avoid caching)
+# Use a mix of common and random subdomains
+test_domains = ["google.com", "cloudflare.com", "github.com"]
+
+[alerts]
+# Console output: Display alerts in terminal
+console = true
+
+# File logging: Write alerts to file
+file = true
+log_path = "./alerts.log"
+
+# Alert deduplication window (seconds)
+# Suppress duplicate alerts within this time window
+dedup_window_s = 300            # 5 minutes
+
+# Summary: Print ongoing issues summary periodically
+summary_interval_s = 300        # Every 5 minutes
+
+[data_retention]
+# How long to keep different types of data
+
+# Raw measurements (per-second data)
+raw_days = 30
+
+# 1-minute aggregations
+aggregated_1min_days = 90       # ~3 months
+
+# 1-hour aggregations
+aggregated_1hour_days = 365     # 1 year
+
+# Events (alerts and detected issues)
+# Events are kept indefinitely by default, set to a number to limit
+events_days = 0                 # 0 = keep forever
+
+# Automatic cleanup: Run cleanup job at this time daily (HH:MM format)
+cleanup_time = "03:00"
+
+[output]
+# Console output configuration
+
+# Update frequency: How often to refresh console display (milliseconds)
+# Lower = more responsive, higher = less CPU usage
+refresh_interval_ms = 1000
+
+# Statistics windows: Calculate rolling statistics over these periods
+# Display in console output
+stats_windows_s = [60, 300, 3600]  # 1 min, 5 min, 1 hour
+
+# Percentiles to display (in addition to min/max/avg)
+percentiles = [50, 95, 99]      # Median, 95th, 99th percentile
+
+# Color output: Use ANSI colors in terminal (true/false)
+use_colors = true
+
+[export]
+# Data export configuration
+
+# Export formats to enable
+enable_csv = true              # CSV for spreadsheet analysis
+enable_json = true             # JSON for programmatic analysis
+enable_charts = true           # PNG charts for visualization
+
+# Chart generation settings (requires enable_charts = true)
+chart_width = 1920             # Chart width in pixels
+chart_height = 1080            # Chart height in pixels
+chart_dpi = 100                # DPI for chart rendering
+chart_style = "darkgrid"       # Style: "darkgrid", "whitegrid", "dark", "white"
+
+# Default export path (used by CLI export command)
+export_directory = "./exports"
+
+# Chart types to generate by default
+default_charts = [
+    "latency_over_time",       # Line chart: latency vs time
+    "jitter_over_time",        # Line chart: jitter vs time
+    "packet_loss_over_time",   # Line chart: packet loss % vs time
+    "throughput_over_time",    # Line chart: upload/download speed vs time
+    "latency_distribution",    # Histogram: latency distribution
+    "connection_comparison",   # Bar chart: compare interfaces/connections
+    "daily_heatmap",          # Heatmap: quality by hour of day
+]
+
+[logging]
+# Application logging (not measurements, see alerts.log_path for alerts)
+
+# Log level: "trace", "debug", "info", "warn", "error"
+level = "info"
+
+# Log to file
+log_to_file = true
+log_path = "./bufferbane.log"
+
+# Log rotation
+log_rotation_mb = 100           # Rotate when file reaches this size
+log_max_files = 5               # Keep this many old log files
+

@@ -1,0 +1,36 @@
+# Actual configuration files (contain secrets)
+client.conf
+server.conf
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Log files
+*.log
+
+# Statistics and exports
+exports/
+stats.json
+*.csv
+*.json
+*.png
+*.html
+
+# Build artifacts (Rust)
+target/
+Cargo.lock
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+
