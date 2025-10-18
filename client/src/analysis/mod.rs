@@ -27,10 +27,11 @@ impl AlertManager {
         
         for m in measurements {
             // Check latency threshold
+            // Check RTT latency
             if let Some(rtt) = m.rtt_ms {
                 if rtt > self.config.alerts.latency_threshold_ms {
                     warn!(
-                        "HIGH LATENCY ALERT: {} -> {:.2}ms (threshold: {:.2}ms)",
+                        "HIGH LATENCY ALERT: {} -> RTT {:.2}ms (threshold: {:.2}ms)",
                         m.target, rtt, self.config.alerts.latency_threshold_ms
                     );
                     
@@ -39,9 +40,51 @@ impl AlertManager {
                         "high_latency",
                         &m.target,
                         "warning",
-                        &format!("Latency {:.2}ms exceeds threshold {:.2}ms", 
+                        &format!("RTT {:.2}ms exceeds threshold {:.2}ms", 
                                 rtt, self.config.alerts.latency_threshold_ms),
                         Some(rtt),
+                        Some(self.config.alerts.latency_threshold_ms),
+                    );
+                }
+            }
+            
+            // Check upload latency (server tests only)
+            if let Some(upload) = m.upload_latency_ms {
+                if upload > self.config.alerts.latency_threshold_ms {
+                    warn!(
+                        "HIGH UPLOAD LATENCY ALERT: {} -> Upload {:.2}ms (threshold: {:.2}ms)",
+                        m.target, upload, self.config.alerts.latency_threshold_ms
+                    );
+                    
+                    // Store event in database
+                    let _ = self.db.store_event(
+                        "high_latency",
+                        &m.target,
+                        "warning",
+                        &format!("Upload latency {:.2}ms exceeds threshold {:.2}ms", 
+                                upload, self.config.alerts.latency_threshold_ms),
+                        Some(upload),
+                        Some(self.config.alerts.latency_threshold_ms),
+                    );
+                }
+            }
+            
+            // Check download latency (server tests only)
+            if let Some(download) = m.download_latency_ms {
+                if download > self.config.alerts.latency_threshold_ms {
+                    warn!(
+                        "HIGH DOWNLOAD LATENCY ALERT: {} -> Download {:.2}ms (threshold: {:.2}ms)",
+                        m.target, download, self.config.alerts.latency_threshold_ms
+                    );
+                    
+                    // Store event in database
+                    let _ = self.db.store_event(
+                        "high_latency",
+                        &m.target,
+                        "warning",
+                        &format!("Download latency {:.2}ms exceeds threshold {:.2}ms", 
+                                download, self.config.alerts.latency_threshold_ms),
+                        Some(download),
                         Some(self.config.alerts.latency_threshold_ms),
                     );
                 }
