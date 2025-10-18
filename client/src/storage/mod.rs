@@ -190,6 +190,7 @@ impl Database {
         Ok(measurements)
     }
     
+    #[allow(dead_code)]
     pub fn store_event(&self, 
         event_type: &str, 
         target: &str, 
@@ -223,6 +224,7 @@ impl Database {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn query_events(&self, start: i64, end: i64) -> Result<Vec<Event>> {
         let mut stmt = self.conn.prepare(
             "SELECT timestamp, event_type, target, severity, message, value, threshold
@@ -249,6 +251,7 @@ impl Database {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Event {
     pub timestamp: i64,
     pub event_type: String,

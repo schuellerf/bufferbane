@@ -8,7 +8,9 @@ use std::path::Path;
 pub struct Config {
     pub general: GeneralConfig,
     pub security: SecurityConfig,
+    #[allow(dead_code)]
     pub rate_limiting: RateLimitingConfig,
+    #[allow(dead_code)]
     pub logging: LoggingConfig,
 }
 
@@ -22,12 +24,15 @@ pub struct GeneralConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SecurityConfig {
     pub shared_secret: String,  // Hex-encoded 32-byte secret
+    #[allow(dead_code)]
     pub knock_timeout_sec: u64,
     pub session_timeout_sec: u64,
+    #[allow(dead_code)]
     pub enable_rate_limiting: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct RateLimitingConfig {
     pub max_packets_per_second: usize,
     pub max_bandwidth_mbps: usize,
@@ -35,6 +40,7 @@ pub struct RateLimitingConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct LoggingConfig {
     pub level: String,
     pub log_successful_knocks: bool,

@@ -9,13 +9,19 @@ use tokio::sync::RwLock;
 /// Client session information
 #[derive(Debug, Clone)]
 pub struct Session {
+    #[allow(dead_code)]
     pub session_id: u64,
+    #[allow(dead_code)]
     pub client_id: u64,
+    #[allow(dead_code)]
     pub client_addr: SocketAddr,
+    #[allow(dead_code)]
     pub authenticated_at: Instant,
     pub last_seen: Instant,
     pub packets_received: u64,
+    #[allow(dead_code)]
     pub bytes_received: u64,
+    #[allow(dead_code)]
     pub bytes_sent: u64,
 }
 
@@ -60,6 +66,7 @@ impl SessionManager {
     }
     
     /// Get a session by session_id
+    #[allow(dead_code)]
     pub async fn get_session(&self, session_id: u64) -> Option<Session> {
         let sessions = self.sessions.read().await;
         sessions.get(&session_id).cloned()
@@ -75,6 +82,7 @@ impl SessionManager {
     }
     
     /// Update statistics
+    #[allow(dead_code)]
     pub async fn update_stats(&self, session_id: u64, bytes_received: u64, bytes_sent: u64) {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(&session_id) {
@@ -100,6 +108,7 @@ impl SessionManager {
     }
     
     /// Check if a session exists and is valid
+    #[allow(dead_code)]
     pub async fn is_valid(&self, session_id: u64) -> bool {
         let sessions = self.sessions.read().await;
         if let Some(session) = sessions.get(&session_id) {

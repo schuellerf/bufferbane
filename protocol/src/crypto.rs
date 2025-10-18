@@ -3,7 +3,7 @@
 
 use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
-    ChaCha20Poly1305, Key, Nonce,
+    ChaCha20Poly1305,
 };
 use thiserror::Error;
 
@@ -53,9 +53,8 @@ pub fn encrypt(
         });
     }
     
-    let key = Key::from_slice(shared_secret);
-    let cipher = ChaCha20Poly1305::new(key);
-    let nonce = Nonce::from_slice(nonce);
+    let cipher = ChaCha20Poly1305::new(shared_secret.into());
+    let nonce = nonce.into();
     
     let payload = Payload {
         msg: plaintext,
@@ -91,9 +90,8 @@ pub fn decrypt(
         });
     }
     
-    let key = Key::from_slice(shared_secret);
-    let cipher = ChaCha20Poly1305::new(key);
-    let nonce = Nonce::from_slice(nonce);
+    let cipher = ChaCha20Poly1305::new(shared_secret.into());
+    let nonce = nonce.into();
     
     let payload = Payload {
         msg: ciphertext,
