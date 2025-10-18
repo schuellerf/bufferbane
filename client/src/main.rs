@@ -47,6 +47,10 @@ struct Args {
     /// End time for range: YYYY-MM-DD HH:MM
     #[arg(long)]
     end: Option<String>,
+    
+    /// Generate interactive HTML chart instead of static PNG
+    #[arg(long)]
+    interactive: bool,
 }
 
 #[tokio::main]
@@ -191,13 +195,22 @@ async fn run_chart(config: &config::Config, args: &Args) -> Result<()> {
     
     // Determine output file
     let output_path = args.output.clone().unwrap_or_else(|| {
-        PathBuf::from("latency.png")
+        if args.interactive {
+            PathBuf::from(format!("latency_{}.html", chrono::Local::now().format("%Y%m%d_%H%M%S")))
+        } else {
+            PathBuf::from(format!("latency_{}.png", chrono::Local::now().format("%Y%m%d_%H%M%S")))
+        }
     });
     
     // Generate chart with min/max/avg/percentile lines
-    charts::generate_latency_chart(&measurements, &output_path, config)?;
-    
-    info!("Chart saved to {:?}", output_path);
+    if args.interactive {
+        charts::generate_interactive_chart(&measurements, &output_path, config)?;
+        info!("Interactive chart saved to {:?}", output_path);
+        info!("Open the file in your web browser to view the interactive chart");
+    } else {
+        charts::generate_latency_chart(&measurements, &output_path, config)?;
+        info!("Chart saved to {:?}", output_path);
+    }
     
     Ok(())
 }

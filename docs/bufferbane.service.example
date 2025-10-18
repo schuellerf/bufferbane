@@ -1,0 +1,57 @@
+# Bufferbane Systemd Service Example
+#
+# This file provides an example systemd service configuration for running
+# Bufferbane as a background service on Linux.
+#
+# Installation:
+# 1. Copy this file to /etc/systemd/system/bufferbane.service
+# 2. Edit the paths and username to match your setup
+# 3. Run: sudo systemctl daemon-reload
+# 4. Run: sudo systemctl enable bufferbane
+# 5. Run: sudo systemctl start bufferbane
+#
+# Check status: sudo systemctl status bufferbane
+# View logs: sudo journalctl -u bufferbane -f
+
+[Unit]
+Description=Bufferbane Network Quality Monitoring
+Documentation=https://github.com/schuellerf/bufferbane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Change this to your username
+User=YOUR_USERNAME
+
+# Change this to your installation directory
+WorkingDirectory=/home/YOUR_USERNAME/bufferbane
+
+# Path to binary and config
+ExecStart=/home/YOUR_USERNAME/bufferbane/target/release/bufferbane --config /home/YOUR_USERNAME/bufferbane/client.conf
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Capabilities for ICMP (raw sockets)
+# This allows the service to run without sudo
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
+# Security hardening (optional)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/YOUR_USERNAME/bufferbane
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bufferbane
+
+[Install]
+WantedBy=multi-user.target
+

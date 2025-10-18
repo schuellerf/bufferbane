@@ -1,463 +1,457 @@
-# Bufferbane - Planning Documents
+# Bufferbane
 
-**Bufferbane**: The bane of bufferbloat - a network quality monitoring tool for cable internet.
+**Network quality monitoring for cable internet with bufferbloat detection**
 
-This repository contains comprehensive planning and research documentation for building Bufferbane, a network quality monitoring application specifically designed to detect fine-grained network instabilities on cable internet (such as Magenta Austria, co-ax connection), with a particular focus on bufferbloat detection and upload monitoring.
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![Rust](https://img.shields.io/badge/Rust-2024-orange.svg)
+![Status](https://img.shields.io/badge/Status-Phase%201%20Complete-green.svg)
 
-## Overview
+Bufferbane is a high-precision network monitoring tool designed to detect fine-grained network issues on cable internet connections (DOCSIS). It performs per-second measurements to identify latency spikes, jitter, packet loss, and bufferbloat that traditional tools miss.
 
-The goal is to create a client-server application that performs high-frequency (1-second interval) network quality tests to detect subtle issues that don't completely break connectivity but cause problems for applications like video conferencing, VoIP, file uploads, and online gaming.
-
-**Project Name**: Bufferbane  
-**Magic Bytes**: `BFBN` (0x4246424E)  
-**Architecture**: The system consists of two components:
-- **Client**: Runs on your local network, performs tests, stores data, generates alerts
-- **Server** (optional): Lightweight VPS-based service that enables throughput and bufferbloat testing
-
-The client can operate standalone (ICMP latency monitoring only) or with the server (full feature set including bufferbloat detection).
-
-## Documents
-
-### 📋 [SPECIFICATION.md](SPECIFICATION.md)
-Complete technical specification covering:
-- **Operating modes**: Standalone (ICMP only) vs. with server (full features)
-- **Network metrics to monitor**: Latency, jitter, packet loss, throughput (upload/download), DNS resolution, connection stability, bufferbloat
-- **Detection methods**: ICMP, UDP streams, TCP tests, multiple targets, parallel testing
-- **Server architecture**: Lightweight echo and throughput service
-- **Security model**: Port knocking + ChaCha20-Poly1305 AEAD encryption + authentication
-- **Protocol specification**: Complete packet format with encryption and communication flow
-- **Data collection & storage**: SQLite database with per-second measurements (client side)
-- **Alert conditions**: Thresholds and detection logic for various issues
-- **Configuration**: Client and server config file formats with examples
-
-### 🎯 [SCENARIOS.md](SCENARIOS.md)
-Detailed descriptions of network instability scenarios specific to cable internet:
-1. **Intermittent Upload Degradation**: Periodic upload speed drops
-2. **Bufferbloat**: High latency under load
-3. **Packet Loss Bursts**: Short periods of consecutive packet loss
-4. **Asymmetric Issues**: Upload fails while download works (or vice versa)
-5. **ISP Routing Issues**: Problems to specific destinations
-6. **Peak Hour Degradation**: Evening slowdowns due to neighborhood congestion
-7. **Micro-Disconnections**: Brief complete disconnections
-
-Each scenario includes symptoms, detection methods, data signatures, and root causes.
-
-### 🔍 [RESEARCH.md](RESEARCH.md)
-Comprehensive evaluation of existing open-source tools:
-- **Tools evaluated**: Smokeping, LibreSpeed, netdata, iperf3, MTR, Gping, Flent, IRTT, NetPerfMeter, and more
-- **Gap analysis**: What exists vs. what's needed
-- **Technology recommendation**: **Rust** selected as optimal choice
-- **Architecture proposal**: Detailed crate recommendations and 4-phase implementation strategy
-
-### 📊 [PHASE_SUMMARY.md](PHASE_SUMMARY.md)
-Quick reference for the 4 implementation phases:
-- **Phase overview**: Effort, features, and use cases for each phase
-- **Feature matrix**: What's included in each phase
-- **Recommended order**: Phase 1 → 2 → 4 (skip 3 initially)
-- **When to stop**: Decision guide for each phase
-- **Dependencies**: Required Rust crates per phase
-
-### 🔒 [ENCRYPTION_SECURITY.md](ENCRYPTION_SECURITY.md)
-Complete analysis of the encryption and security model:
-- **Encryption scheme**: ChaCha20-Poly1305 AEAD explained
-- **Nonce construction**: Nanosecond timestamps for replay protection
-- **Security properties**: What's protected and what's not
-- **Pattern analysis resistance**: How encryption + padding hides traffic patterns
-- **Threat model**: Detailed protection analysis
-- **Performance impact**: Negligible overhead (<0.1% of RTT)
-- **Comparison**: vs. TLS, vs. no encryption, vs. VPN
-
-### 🌐 [MULTI_INTERFACE.md](MULTI_INTERFACE.md)
-Multi-interface monitoring documentation (Phase 4):
-- **Simultaneous testing**: WiFi + Ethernet at the same time
-- **Real-time comparison**: Isolate WiFi vs ISP issues definitively
-- **Linux implementation**: Interface binding with SO_BINDTODEVICE
-- **Use cases**: Diagnose WiFi, A/B testing, failover monitoring
-- **Advantages**: Answer in minutes instead of weeks
-- **Export & visualization**: Comparison charts and time series
-
-### 🗄️ [RRD_VS_SQLITE.md](RRD_VS_SQLITE.md)
-Database technology decision analysis:
-- **Comparison**: Round Robin Database vs SQLite
-- **Verdict**: SQLite chosen for simplicity and flexibility
-- **Rationale**: Less code, more query flexibility, better tooling
-
-### 🔧 [SERVER_COMPONENT.md](SERVER_COMPONENT.md)
-Quick reference for server architecture:
-- **Benefits**: Throughput testing, bufferbloat detection, bidirectional packet loss
-- **Security**: Port knocking + ChaCha20-Poly1305 encryption
-- **Protocol**: Binary UDP with 10 packet types
-- **Deployment**: VPS setup, systemd service, Docker option
-
-## Key Findings
-
-### Existing Tools Assessment
-
-**No single existing tool meets all requirements.** The closest matches are:
-- **IRTT** (8/10): Excellent for precise latency/jitter, but no throughput testing
-- **Flent** (7/10): Great for bufferbloat detection, but not for continuous monitoring
-- **MTR** (6/10): Good for diagnostics, but incomplete feature set
-
-### Technology Decision: Rust (Client + Server)
-
-**Primary recommendation: Build custom client-server solution in Rust**
-
-**Rationale**:
-- ✅ Microsecond-precision timing (no GC pauses)
-- ✅ Raw socket access for packet-level control
-- ✅ Single binary deployment for both client and server
-- ✅ Efficient async runtime (Tokio)
-- ✅ Memory safety for 24/7 operation
-- ✅ Low CPU/memory footprint
-- ✅ Simple security (port knocking + ChaCha20-Poly1305 encryption, no complex auth)
-
-**Server Benefits**:
-- ✅ Accurate throughput testing (critical for upload monitoring)
-- ✅ Bufferbloat detection (RRUL-style testing)
-- ✅ Bidirectional packet loss tracking
-- ✅ Connection stability monitoring
-
-**Alternative**: Go (second choice) or Python (rapid prototyping only)
-
-## Implementation Roadmap
-
-Bufferbane development is organized into 4 major phases:
-
-### Phase 1: Client Only (1-2 weeks)
-**Goal**: Basic but functional latency monitoring with visual output
-
-- Shared protocol library (encryption, packet structures)
-- Client CLI with configuration
-- ICMP ping to multiple targets (1-second intervals)
-- SQLite storage for measurements
-- Console output with real-time stats
-- DNS resolution monitoring
-- Alert detection and logging
-- Basic export (CSV, JSON)
-- **Basic chart export (PNG with min/max/avg/percentile lines)**
-
-**✅ Milestone: Immediately useful for latency diagnosis with visual proof**
-
-**Capabilities**: Latency, jitter, basic packet loss, DNS monitoring, **visual chart export**
+**Project Name**: *Bufferbane* - "Bane of bufferbloat" (destroyer of buffer bloat issues)  
+**Magic Bytes**: `BFBN` (0x4246424E)
 
 ---
 
-### Phase 2: Client + Server (2-3 weeks)
-**Goal**: Full-featured monitoring with throughput and bufferbloat
+## Features (Phase 1 - Current)
 
-**Server:**
-- Server CLI and configuration
-- Port knocking + ChaCha20-Poly1305 encryption
-- Echo service (improved latency/packet loss)
-- Upload/download throughput testing
-- Bufferbloat test coordination
-- Session management and rate limiting
+✅ **ICMP Latency Monitoring**
+- Per-second ping tests to multiple targets
+- RTT, jitter, and packet loss tracking
+- Microsecond-precision timestamps
 
-**Client additions:**
-- Server communication (encrypted protocol)
-- Upload/download test implementation
-- Bufferbloat test orchestration
-- Throughput metrics and alerts
-- Bufferbloat detection and alerts
+✅ **SQLite Database Storage**
+- Historical data with efficient indexing
+- Query by time range, target, or connection type
+- Automatic schema management
 
-**✅ Milestone: Complete solution for cable internet diagnosis**
+✅ **Visual Chart Export**
+- **Static PNG** charts with min/max/avg/P95/P99 lines
+- **Interactive HTML** charts with hover tooltips (NEW! ✨)
+- Shaded variance areas
+- Multiple targets on same plot
+- Large, readable fonts for accessibility
+- Configurable size and style
 
-**Capabilities**: All Phase 1 + throughput testing + bufferbloat detection
+✅ **CSV Data Export**
+- Flexible time range selection (`--last 24h`, `--start`/`--end`)
+- Spreadsheet-compatible format
+- All measurement fields included
 
----
+✅ **Real-time Console Output**
+- Live latency display
+- Timestamps for each measurement
+- Color-coded output (optional)
 
-### Phase 3: Multiple Servers (1-2 weeks)
-**Goal**: Geographic diversity and routing issue detection
-
-**Client additions:**
-- Multi-server configuration support
-- Parallel testing to multiple servers
-- Per-server metrics storage
-- Cross-server comparison analysis
-- Routing issue detection
-- Server failover logic
-
-**✅ Milestone: Detect ISP routing problems**
-
-**Capabilities**: All Phase 2 + multi-server comparison + routing diagnosis
+✅ **Alert System**
+- Threshold-based alerts (latency, jitter, packet loss)
+- Configurable thresholds
+- Alert logging to file
 
 ---
 
-### Phase 4: Multiple Interfaces + Multiple Servers (2-3 weeks)
-**Goal**: Real-time WiFi vs Ethernet comparison + comprehensive export
+## Quick Start
 
-**Client additions:**
-- Multi-interface configuration support
-- Interface binding (Linux SO_BINDTODEVICE)
-- **Simultaneous testing across WiFi + Ethernet**
-- Auto-detection of interface type
-- Per-interface metrics storage
-- Real-time interface comparison
-- Interface-specific alerts
+### Prerequisites
 
-**Export enhancements:**
-- **Advanced chart types** (extends Phase 1 basic chart to 8 total types)
-- Comprehensive reporting (Markdown, HTML)
-- Interface comparison visualizations
-- Heatmaps for time-of-day patterns
-- Batch chart generation
+- **Rust 1.70+** (edition 2024)
+- **Linux** (for ICMP - requires `CAP_NET_RAW` capability)
+- **SQLite 3.x** (bundled with rusqlite)
 
-**✅ Milestone: Complete solution with all advanced features**
+### Installation
 
-**Capabilities**: 
-- All Phase 3 features
-- **WiFi vs Ethernet simultaneous testing**
-- **Visual reporting** (PNG charts)
-- **Comprehensive export** (CSV, JSON, charts, reports)
-- Definitive WiFi vs ISP diagnosis
+```bash
+# Clone the repository
+git clone https://github.com/schuellerf/bufferbane.git
+cd bufferbane
+
+# Build release binary
+cargo build --release
+
+# Set ICMP capability (required for ICMP ping)
+sudo setcap cap_net_raw+ep ./target/release/bufferbane
+
+# Or run with sudo
+sudo ./target/release/bufferbane
+```
+
+### Configuration
+
+```bash
+# Copy template to create your config
+cp client.conf.template client.conf
+
+# Edit configuration (optional - defaults work out of the box)
+vim client.conf
+```
+
+Key configuration options:
+- **Test interval**: How often to ping (default: 1000ms)
+- **Database path**: Where to store measurements (default: `./bufferbane.db`)
+- **Targets**: Public DNS servers (default: 8.8.8.8, 1.1.1.1)
+- **Alert thresholds**: Latency, jitter, packet loss limits
+
+### Usage
+
+#### Monitoring Mode (Continuous)
+
+```bash
+# Start monitoring (Ctrl+C to stop)
+./target/release/bufferbane --config client.conf
+```
+
+Output:
+```
+[14:23:59] 8.8.8.8 -> 18.28ms
+[14:23:59] 1.1.1.1 -> 13.47ms
+[14:24:00] 8.8.8.8 -> 23.21ms
+[14:24:00] 1.1.1.1 -> 15.21ms
+```
+
+#### Export to CSV
+
+```bash
+# Last 24 hours (default)
+./target/release/bufferbane --export --output report.csv
+
+# Last 7 days
+./target/release/bufferbane --export --last 7d --output week.csv
+
+# Specific date range
+./target/release/bufferbane --export \
+  --start "2025-10-18 00:00" \
+  --end "2025-10-18 23:59" \
+  --output oct18.csv
+```
+
+#### Generate Chart
+
+```bash
+# Last 24 hours (default)
+./target/release/bufferbane --chart --output latency.png
+
+# Last 6 hours
+./target/release/bufferbane --chart --last 6h --output tonight.png
+
+# Specific date range
+./target/release/bufferbane --chart \
+  --start "2025-10-18 18:00" \
+  --end "2025-10-18 22:00" \
+  --output problem_evening.png
+```
+
+The chart includes:
+- **Min line** (lower bound, thin)
+- **Max line** (upper bound, thin)
+- **Avg line** (bold, primary metric)
+- **P95/P99 lines** (95th/99th percentile, dashed)
+- **Shaded area** between min/max showing variance
+- **Color-coded targets** with legend
 
 ---
 
-### Phase Summary
+## Use Cases
 
-| Phase | Effort | Key Feature | Use Case |
-|-------|--------|-------------|----------|
-| **1: Client Only** | 1-2 weeks | ICMP latency | Basic diagnosis |
-| **2: + Server** | 2-3 weeks | Throughput + bufferbloat | Cable diagnosis |
-| **3: + Multi-Server** | 1-2 weeks | Geographic diversity | Routing issues |
-| **4: + Multi-Interface** | 2-3 weeks | WiFi vs Ethernet + export | Complete solution |
+### Diagnose Evening Slowdowns
 
-**Total estimated effort**: 6-10 weeks for all phases
+```bash
+# Monitor continuously
+./target/release/bufferbane &
 
-**Recommended order**: Phases 1→2→4 (skip Phase 3 unless routing issues are a concern)
+# Next day, check the evening period
+./target/release/bufferbane --chart \
+  --start "2025-10-18 18:00" \
+  --end "2025-10-18 23:00" \
+  --output evening_issue.png
+```
 
-## Use Case
+**Result**: Visual proof of ISP congestion during peak hours.
 
-This monitoring solution is specifically designed for:
-- **ISP**: Magenta Austria (cable/co-ax)
-- **Primary concern**: Unstable upload connection
-- **Detection goal**: Identify issues that don't break connectivity but affect applications
-- **Frequency**: 1-second test granularity
-- **Operation**: Continuous background monitoring with historical data
+### Prove Connection Issues to ISP
 
-## Key Metrics
+```bash
+# Collect 7 days of data
+./target/release/bufferbane &
 
-The monitor will track:
-1. **Latency (RTT)**: Round-trip time to multiple targets
-2. **Jitter**: Variation in latency (stability indicator)
-3. **Packet Loss**: Missing packets in percentage and patterns
-4. **Upload Throughput**: Actual vs. expected upload speed
-5. **Download Throughput**: Actual vs. expected download speed
-6. **DNS Resolution**: Time to resolve hostnames
-7. **Connection Stability**: TCP connection establishment and drops
-8. **Bufferbloat**: Latency increase under load
+# Generate report after a week
+./target/release/bufferbane --export --last 7d --output isp_complaint.csv
+./target/release/bufferbane --chart --last 7d --output latency_proof.png
+```
 
-## Alert Types
+**Result**: Hard evidence of consistent latency spikes or packet loss.
 
-Automatic detection and alerting for:
-- Latency spikes (>3x baseline)
-- High jitter (>30ms sustained)
-- Packet loss (>1% or bursts)
-- Upload/download degradation (<70% baseline)
-- DNS issues (slow or failing resolutions)
-- Connection instability (drops/resets)
-- Bufferbloat (>200ms latency increase under load)
+### Monitor Connection Stability
 
-## Data Storage
+```bash
+# Run as a systemd service (see docs/systemd-service.example)
+sudo systemctl start bufferbane
+sudo systemctl enable bufferbane
 
-- **Primary**: SQLite database (single file, no server)
-- **Per-second**: Raw measurements
-- **Aggregations**: 1-minute and 1-hour rollups
-- **Events**: All detected issues with full details
-- **Retention**: 30 days raw, 90 days aggregated, 1 year hourly
-- **Export**: CSV and JSON formats available
+# Check live stats
+./target/release/bufferbane --export --last 1h --output current.csv
+```
 
-## Next Steps
+---
 
-1. ✅ **Specification completed** - Technical requirements documented
-2. ✅ **Scenarios documented** - Test cases and patterns identified
-3. ✅ **Research completed** - Technology stack selected
-4. ⏭️ **Implementation** - Ready to begin development
-
-## Project Structure (Proposed)
+## Project Structure
 
 ```
 bufferbane/
-├── client/                  # Client application
+├── client/                    # Main client application
 │   ├── src/
-│   │   ├── main.rs          # Entry point & CLI
-│   │   ├── config.rs        # Configuration management
-│   │   ├── monitor/         # Test implementations
-│   │   │   ├── icmp.rs      # ICMP ping
-│   │   │   ├── server_tests.rs  # Tests requiring server
-│   │   │   └── dns.rs       # DNS resolution
-│   │   ├── protocol/        # Client-side protocol
-│   │   │   ├── packets.rs   # Packet encode/decode
-│   │   │   └── security.rs  # HMAC, knock sequence
-│   │   ├── storage/         # Database operations
-│   │   ├── analysis/        # Statistics & alerts
-│   │   └── output/          # Console & export
+│   │   ├── main.rs           # Entry point and CLI
+│   │   ├── config/           # Configuration management
+│   │   ├── testing/          # ICMP testing logic
+│   │   ├── storage/          # SQLite database
+│   │   ├── analysis/         # Alert detection
+│   │   ├── output/           # Console output & CSV export
+│   │   └── charts/           # PNG chart generation
 │   └── Cargo.toml
 │
-├── server/                  # Server application (optional)
+├── protocol/                  # Shared protocol library (for Phase 2+)
 │   ├── src/
-│   │   ├── main.rs          # Entry point
-│   │   ├── config.rs        # Server configuration
-│   │   ├── protocol/        # Server-side protocol
-│   │   │   ├── packets.rs   # Packet encode/decode
-│   │   │   └── security.rs  # HMAC verification
-│   │   ├── handlers/        # Request handlers
-│   │   │   ├── echo.rs      # Echo service
-│   │   │   ├── throughput.rs  # Upload/download
-│   │   │   └── bufferbloat.rs # Bufferbloat tests
-│   │   └── session/         # Session & rate limiting
-│   ├── Cargo.toml
-│   └── Dockerfile           # Docker deployment
-│
-├── protocol/                # Shared protocol library
-│   ├── src/
-│   │   ├── lib.rs           # Protocol constants
-│   │   ├── types.rs         # Packet types
-│   │   └── constants.rs     # Magic bytes, versions
+│   │   ├── lib.rs            # Protocol constants
+│   │   ├── constants.rs      # Packet types, magic bytes
+│   │   └── error.rs          # Protocol errors
 │   └── Cargo.toml
 │
-├── docs/                    # Documentation
-│   ├── SPECIFICATION.md     # Technical specification
-│   ├── SCENARIOS.md         # Network scenarios
-│   ├── RESEARCH.md          # Technology research
-│   ├── PHASE_SUMMARY.md     # 4-phase implementation guide
-│   ├── ENCRYPTION_SECURITY.md # Encryption analysis
-│   ├── MULTI_INTERFACE.md   # Multi-interface monitoring
-│   ├── SERVER_COMPONENT.md  # Server quick reference
-│   ├── RRD_VS_SQLITE.md     # Database decision
-│   └── README.md            # This file
+├── docs/
+│   └── planning/             # Planning documents (spec, research)
+│       ├── README.md         # Planning docs index
+│       ├── SPECIFICATION.md  # Technical specification
+│       ├── SCENARIOS.md      # Network scenarios
+│       ├── RESEARCH.md       # Tool evaluation
+│       ├── PHASE_SUMMARY.md  # Implementation roadmap
+│       └── ... (more planning docs)
 │
-├── client.conf.template     # Client config template
-├── server.conf.template     # Server config template
-├── .gitignore              # Ignore *.conf, *.db, *.log
-└── README.md               # Project overview
+├── client.conf.template      # Configuration template
+├── .gitignore               # Ignore *.conf, *.db, *.log, etc.
+├── Cargo.toml               # Workspace configuration
+├── LICENSE                  # MIT License
+└── README.md                # This file
 ```
 
-## Requirements
+---
 
-### Client System Requirements
-- Linux (primary), macOS, or Windows
-- Raw socket capability (CAP_NET_RAW on Linux for ICMP)
-- ~10-50 MB RAM
-- ~1 GB disk space per month of monitoring (SQLite database)
-- Minimal bandwidth (~100-500 KB/s standalone, ~1-2 MB/s with server tests)
+## Implementation Status
 
-### Server System Requirements (Optional)
-- Linux VPS (recommended: Hetzner, Netcup in EU)
-- Location: Vienna or Frankfurt preferred (low latency to Austria)
-- 1 vCPU, 512 MB RAM minimum
-- 10 GB disk
-- 100 Mbps network
-- ~100 GB/month bandwidth
-- Cost: €3-5/month
+### ✅ Phase 1: Client Only (COMPLETED - October 2025)
 
-### Development Requirements
-- Rust 1.70+ (stable)
-- SQLite 3.x (client only)
-- OpenSSL (for secret generation)
-- Standard build tools (cargo, gcc/clang)
+**Features**:
+- ICMP ping to multiple targets (1-second intervals)
+- SQLite database storage
+- Real-time console output
+- CSV export with time range selection
+- **PNG chart generation** with min/max/avg/percentile visualization
+- Alert detection (latency, jitter, packet loss)
+- TOML configuration
+
+**Deliverables**:
+- `bufferbane` binary (standalone client)
+- Configuration template
+- Complete source code
+
+### 📋 Phase 2: Client + Server (Planned)
+
+**Goals**: Full-featured monitoring with throughput and bufferbloat detection
+
+**Features**:
+- Companion server application
+- Upload/download throughput testing
+- Bufferbloat detection (RRUL-style)
+- Bidirectional packet loss tracking
+- ChaCha20-Poly1305 encrypted protocol
+- Port knocking security
+
+**Estimated effort**: 2-3 weeks
+
+### 📋 Phase 3: Multiple Servers (Planned)
+
+**Goals**: Geographic diversity for routing diagnosis
+
+**Features**:
+- Test to multiple servers simultaneously
+- Routing issue detection
+- Server failover and redundancy
+
+**Estimated effort**: 1-2 weeks
+
+### 📋 Phase 4: Multi-Interface + Advanced Export (Planned)
+
+**Goals**: WiFi vs Ethernet comparison + comprehensive reporting
+
+**Features**:
+- **Simultaneous testing** of multiple interfaces (WiFi + Ethernet)
+- Real-time interface comparison
+- 8 chart types (jitter, throughput, heatmaps, etc.)
+- HTML/Markdown reports
+
+**Estimated effort**: 2-3 weeks
+
+---
 
 ## Configuration
 
-Configuration uses TOML files. Fully documented templates are provided:
+See [`client.conf.template`](client.conf.template) for full configuration documentation.
 
-- **`client.conf.template`** - Client configuration (all options documented)
-- **`server.conf.template`** - Server configuration (all options documented)
+Key sections:
 
-### Quick Setup
-
-```bash
-# 1. Copy template to config file (in .gitignore)
-cp client.conf.template client.conf
-
-# 2. For standalone mode: Leave server.enabled = false
-# 3. For server mode:
-#    a. Generate shared secret
-openssl rand -hex 32
-
-#    b. Add secret to client.conf [server] section
-#    c. Enable server: server.enabled = true
-#    d. Set server host/port
-
-# 4. Run client
-bufferbane --config client.conf
+### General Settings
+```toml
+[general]
+test_interval_ms = 1000
+database_path = "./bufferbane.db"
+client_id = "auto"
 ```
 
-### Server Setup
-
-```bash
-# 1. Copy template
-cp server.conf.template server.conf
-
-# 2. Add same shared secret as client
-# 3. Configure bind address/port
-# 4. Run server
-bufferbane-server --config server.conf
+### Targets
+```toml
+[targets]
+public_dns = ["8.8.8.8", "1.1.1.1"]
+custom = []  # Add your own targets
 ```
 
-See template files for complete documentation of all options.
+### Alerts
+```toml
+[alerts]
+enabled = true
+latency_threshold_ms = 100.0
+jitter_threshold_ms = 50.0
+packet_loss_threshold_pct = 5.0
+```
 
-## References
+### Export
+```toml
+[export]
+enable_charts = true
+chart_width = 1920
+chart_height = 1080
+export_directory = "./exports"
+```
 
-- **Cable Internet Architecture**: DOCSIS 3.0/3.1 specifications
-- **Network Testing**: RFC 2544, RFC 6349 (TCP throughput), RFC 8175 (queue management)
-- **Bufferbloat**: https://www.bufferbloat.net/
-- **RRUL Test**: Realtime Response Under Load (Flent methodology)
+---
 
-## License
+## Development
 
-MIT License - See [LICENSE](LICENSE) file for details.
+### Build from Source
 
-This project is open source and freely available for use, modification, and distribution.
+```bash
+# Debug build
+cargo build
+
+# Release build (optimized)
+cargo build --release
+
+# Run tests
+cargo test
+
+# Check for errors without building
+cargo check
+```
+
+### Project Dependencies
+
+- **tokio** - Async runtime
+- **surge-ping** - ICMP ping implementation
+- **rusqlite** - SQLite database
+- **plotters** - Chart generation
+- **clap** - CLI argument parsing
+- **toml** - Configuration parsing
+- **chrono** - Time handling
+
+See [`Cargo.toml`](Cargo.toml) for complete dependency list.
+
+---
+
+## Planning Documentation
+
+Comprehensive planning documentation (~5000+ lines) is available in [`docs/planning/`](docs/planning/):
+
+- **[SPECIFICATION.md](docs/planning/SPECIFICATION.md)** - Complete technical specification
+- **[PHASE_SUMMARY.md](docs/planning/PHASE_SUMMARY.md)** - 4-phase implementation roadmap
+- **[RESEARCH.md](docs/planning/RESEARCH.md)** - Tool evaluation and technology decisions
+- **[SCENARIOS.md](docs/planning/SCENARIOS.md)** - Network instability scenarios
+
+**Note**: These documents represent the planning phase and may differ slightly from the actual implementation.
+
+---
+
+## Troubleshooting
+
+### ICMP Permission Denied
+
+**Error**: `Failed to create ICMP client (CAP_NET_RAW required)`
+
+**Solution**:
+```bash
+# Option 1: Set capability (persistent)
+sudo setcap cap_net_raw+ep ./target/release/bufferbane
+
+# Option 2: Run with sudo
+sudo ./target/release/bufferbane
+```
+
+### Database Lock Errors
+
+**Error**: `database is locked`
+
+**Solution**: Only run one instance of bufferbane at a time, or use separate database files.
+
+### Chart Generation Fails
+
+**Error**: `Failed to create chart`
+
+**Solution**: Ensure you have write permissions to the output directory and there's data in the database for the specified time range.
+
+---
+
+## Roadmap
+
+- [x] **Phase 1**: Standalone ICMP monitoring with chart export
+- [ ] **Phase 2**: Server component for throughput and bufferbloat testing
+- [ ] **Phase 3**: Multiple server support for routing diagnosis
+- [ ] **Phase 4**: Multi-interface monitoring (WiFi vs Ethernet)
+- [ ] **Future**: Web dashboard, mobile app, integration with monitoring systems
+
+---
 
 ## Contributing
 
-This is currently in the planning phase. Once implementation begins, contributions following the documented specification will be welcome.
+Contributions are welcome! Please ensure:
+
+1. Code follows Rust best practices
+2. Tests pass: `cargo test`
+3. Code compiles without warnings: `cargo build --release`
+4. Documentation is updated for new features
+5. Commit messages are descriptive
 
 ---
 
-## Summary
+## License
 
-This project provides a complete specification for building a professional-grade network monitoring solution specifically designed for diagnosing cable internet issues. The 4-phase architecture enables:
+MIT License - see [LICENSE](LICENSE) for details.
 
-- **Phase 1 - Basic monitoring** (standalone): Latency, jitter, basic packet loss via ICMP, **visual chart export**
-- **Phase 2 - Advanced monitoring** (with server): Throughput testing, bufferbloat detection, detailed packet loss analysis
-- **Phase 3 - Geographic diversity** (multiple servers): Routing issue detection, redundancy
-- **Phase 4 - Multi-interface** (WiFi + Ethernet): **Simultaneous testing** to isolate WiFi vs ISP issues, advanced charts
-- **Visual export**: Phase 1 includes basic PNG chart (min/max/avg/percentile lines), Phase 4 adds 7 more chart types + HTML reports
-- **Simple security**: Port knocking + ChaCha20-Poly1305 encryption avoids complex authentication
-- **Privacy**: All payloads encrypted, pattern analysis resistance
-- **Production-ready**: Designed for 24/7 operation with low resource usage
-
-The planning phase is complete with detailed specifications for:
-- ✅ Network metrics and detection methods
-- ✅ Client-server protocol with encryption (ChaCha20-Poly1305)
-- ✅ Multi-interface monitoring (WiFi + Ethernet simultaneously)
-- ✅ Multi-server support (geographic diversity)
-- ✅ Export capabilities (CSV, JSON, PNG charts, reports)
-- ✅ Real-world scenarios and test patterns
-- ✅ Technology stack and 4-phase implementation strategy
-- ✅ Configuration templates with full documentation
-- ✅ Database technology decision (SQLite)
-
-**Planning Documents**:
-- `SPECIFICATION.md` - Complete technical specification (1115+ lines)
-- `SCENARIOS.md` - Network instability scenarios (584 lines)
-- `RESEARCH.md` - Open source tools research and phases (905+ lines)
-- `PHASE_SUMMARY.md` - Quick reference for 4 implementation phases (370 lines)
-- `ENCRYPTION_SECURITY.md` - Encryption and security analysis (428 lines)
-- `MULTI_INTERFACE.md` - Multi-interface monitoring (Phase 4) (515 lines)
-- `SERVER_COMPONENT.md` - Server quick reference (397 lines)
-- `RRD_VS_SQLITE.md` - Database decision analysis (266 lines)
-- `client.conf.template` - Client configuration with multi-interface support (220+ lines)
-- `server.conf.template` - Server configuration (225 lines)
+Copyright (c) 2025 Florian Schüller
 
 ---
 
-**Status**: 📝 Planning Complete - Ready for Implementation  
-**Last Updated**: 2025-10-18  
-**Version**: 3.0 (Planning Documentation - Multi-Interface + Export)  
-**Architecture**: Client-Server (4 phases: standalone → +server → +multi-server → +multi-interface)  
-**Database**: SQLite (simpler, more flexible than RRD)  
-**Total Documentation**: ~5020+ lines across 10 files
+## Author
 
+**Florian Schüller** - [@schuellerf](https://github.com/schuellerf)
+
+---
+
+## Acknowledgments
+
+- Inspired by the need for better cable internet diagnostics
+- Built with Rust for performance and reliability
+- Uses the excellent `surge-ping` crate for ICMP
+- Chart generation powered by `plotters`
+
+---
+
+## Links
+
+- **Repository**: https://github.com/schuellerf/bufferbane
+- **Issues**: https://github.com/schuellerf/bufferbane/issues
+- **Bufferbloat Project**: https://www.bufferbloat.net/
