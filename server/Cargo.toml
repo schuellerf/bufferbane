@@ -1,0 +1,46 @@
+[package]
+name = "bufferbane-server"
+version = "0.1.0"
+authors = ["Florian Schüller <schuellerf@gmail.com>"]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/schuellerf/bufferbane"
+description = "Bufferbane server - network quality monitoring server component"
+
+[[bin]]
+name = "bufferbane-server"
+path = "src/main.rs"
+
+[dependencies]
+# Protocol crate (shared with client)
+protocol = { path = "../protocol" }
+
+# Async runtime
+tokio = { version = "1.36", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+# Cryptography
+chacha20poly1305 = "0.10"
+rand = "0.8"
+sha2 = "0.10"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Network
+socket2 = "0.5"
+
+# Time
+chrono = "0.4"
+
+# Command line
+clap = { version = "4.0", features = ["derive"] }
+

@@ -5,6 +5,8 @@
 
 pub mod constants;
 pub mod error;
+pub mod packets;
+pub mod crypto;
 
 pub use constants::*;
 pub use error::ProtocolError;

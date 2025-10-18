@@ -19,7 +19,7 @@ INSTALL_GROUP ?= $(shell id -gn $(INSTALL_USER))
 # Detect home directory for user
 USER_HOME = $(shell getent passwd $(INSTALL_USER) | cut -d: -f6)
 
-.PHONY: all build test clean clean-data install uninstall install-service uninstall-service windows windows-setup help
+.PHONY: all build build-client build-server test clean clean-data install uninstall install-service uninstall-service windows windows-setup help
 
 # Default target
 all: build
@@ -28,7 +28,21 @@ all: build
 build:
 	@echo "Building Bufferbane (release mode)..."
 	cargo build $(RELEASE_FLAGS)
+	@echo "Build complete:"
+	@echo "  Client: $(BUILD_DIR)/bufferbane"
+	@echo "  Server: $(BUILD_DIR)/bufferbane-server"
+
+# Build only client
+build-client:
+	@echo "Building Bufferbane client (release mode)..."
+	cargo build $(RELEASE_FLAGS) -p bufferbane
 	@echo "Build complete: $(BUILD_DIR)/bufferbane"
+
+# Build only server
+build-server:
+	@echo "Building Bufferbane server (release mode)..."
+	cargo build $(RELEASE_FLAGS) -p bufferbane-server
+	@echo "Build complete: $(BUILD_DIR)/bufferbane-server"
 
 # Run tests
 test:
@@ -65,22 +79,29 @@ clean-data:
 # Install binary and config template
 install: build
 	@echo "Installing Bufferbane..."
-	@echo "  Installing binary to $(BINDIR)..."
+	@echo "  Installing binaries to $(BINDIR)..."
 	install -d $(BINDIR)
 	install -m 755 $(BUILD_DIR)/bufferbane $(BINDIR)/bufferbane
+	install -m 755 $(BUILD_DIR)/bufferbane-server $(BINDIR)/bufferbane-server
 	
-	@echo "  Installing configuration template to $(DATADIR)..."
+	@echo "  Installing configuration templates to $(DATADIR)..."
 	install -d $(DATADIR)
 	install -m 644 client.conf.template $(DATADIR)/client.conf.template
+	install -m 644 server.conf.template $(DATADIR)/server.conf.template
 	
 	@echo ""
 	@echo "Bufferbane installed successfully!"
 	@echo ""
-	@echo "Next steps:"
+	@echo "Client setup:"
 	@echo "  1. Create config: cp $(DATADIR)/client.conf.template /etc/bufferbane/client.conf"
 	@echo "  2. Edit config: sudo nano /etc/bufferbane/client.conf"
 	@echo "  3. Install service: sudo make install-service"
 	@echo "  4. Start service: sudo systemctl start bufferbane"
+	@echo ""
+	@echo "Server setup (Phase 2 - optional):"
+	@echo "  1. Create config: cp $(DATADIR)/server.conf.template /etc/bufferbane/server.conf"
+	@echo "  2. Edit config: sudo nano /etc/bufferbane/server.conf"
+	@echo "  3. Run server: bufferbane-server --config /etc/bufferbane/server.conf"
 
 # Install systemd service
 install-service:
@@ -199,11 +220,13 @@ help:
 	@echo "Bufferbane - Network Quality Monitoring"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make build              Build the project (release mode)"
+	@echo "  make build              Build client and server (release mode)"
+	@echo "  make build-client       Build only the client"
+	@echo "  make build-server       Build only the server (Phase 2)"
 	@echo "  make test               Run tests"
 	@echo "  make clean              Clean build artifacts"
 	@echo "  make clean-data         Clean generated data (db, charts, exports, logs)"
-	@echo "  make install            Install binary and config template"
+	@echo "  make install            Install binaries and config templates"
 	@echo "  make install-service    Install systemd service (requires root)"
 	@echo "  make uninstall-service  Uninstall systemd service (requires root)"
 	@echo "  make uninstall          Uninstall everything (requires root)"
