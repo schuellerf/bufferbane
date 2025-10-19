@@ -504,9 +504,14 @@
                 // Check if events are globally shown
                 if (!showEvents) return false;
                 
-                // Check if the event's target series is visible
-                // Events are associated with targets, so hide events for hidden series
-                return seriesVisible[event.target] !== false;
+                // Check if any series for this target is visible
+                // Event target is like "8.8.8.8", series labels are like "8.8.8.8 ICMP"
+                // Show event if ANY series starting with this target is visible
+                const hasVisibleSeries = Object.keys(seriesVisible).some(seriesLabel => {
+                    return seriesLabel.startsWith(event.target + ' ') && seriesVisible[seriesLabel];
+                });
+                
+                return hasVisibleSeries;
             });
             
             visibleEvents.forEach(event => {
@@ -571,8 +576,12 @@
                 // Check if events are globally shown
                 if (!showEvents) return false;
                 
-                // Check if the event's target series is visible
-                return seriesVisible[event.target] !== false;
+                // Check if any series for this target is visible
+                const hasVisibleSeries = Object.keys(seriesVisible).some(seriesLabel => {
+                    return seriesLabel.startsWith(event.target + ' ') && seriesVisible[seriesLabel];
+                });
+                
+                return hasVisibleSeries;
             });
             
             // Draw events as colored bars
@@ -636,7 +645,16 @@
             let nearbyEvents = [];
             events.forEach(event => {
                 // Only check visible events
-                if (!showEvents || seriesVisible[event.target] === false) {
+                if (!showEvents) {
+                    return;
+                }
+                
+                // Check if any series for this target is visible
+                const hasVisibleSeries = Object.keys(seriesVisible).some(seriesLabel => {
+                    return seriesLabel.startsWith(event.target + ' ') && seriesVisible[seriesLabel];
+                });
+                
+                if (!hasVisibleSeries) {
                     return;
                 }
                 
