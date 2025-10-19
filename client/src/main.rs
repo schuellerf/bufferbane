@@ -10,8 +10,8 @@ mod output;
 mod charts;
 mod network_monitor;
 
-use anyhow::Result;
-use clap::Parser;
+use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::{info, error, warn};
 
@@ -22,9 +22,13 @@ use tracing::{info, error, warn};
 #[command(about = "Network quality monitoring for cable internet", long_about = None)]
 struct Args {
     /// Configuration file path
-    #[arg(short, long, default_value = "client.conf")]
+    #[arg(short, long, default_value = "client.conf", global = true)]
     config: PathBuf,
     
+    #[command(subcommand)]
+    command: Option<Command>,
+    
+    // Backwards compatibility: support old-style flags when no subcommand is given
     /// Export data for time range
     #[arg(long)]
     export: bool,
@@ -62,6 +66,73 @@ struct Args {
     quiet: bool,
 }
 
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Run network monitoring (default mode)
+    Monitor {
+        /// Quiet mode: Log hourly statistics instead of every ping
+        #[arg(short, long)]
+        quiet: bool,
+    },
+    
+    /// Export measurement data to CSV
+    Export {
+        /// Output file for export
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        
+        /// Time range: --last 24h, 7d, etc.
+        #[arg(long)]
+        last: Option<String>,
+        
+        /// Start time for range: YYYY-MM-DD HH:MM
+        #[arg(long)]
+        start: Option<String>,
+        
+        /// End time for range: YYYY-MM-DD HH:MM
+        #[arg(long)]
+        end: Option<String>,
+    },
+    
+    /// Generate latency chart
+    Chart {
+        /// Output file for chart
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        
+        /// Time range: --last 24h, 7d, etc.
+        #[arg(long)]
+        last: Option<String>,
+        
+        /// Start time for range: YYYY-MM-DD HH:MM
+        #[arg(long)]
+        start: Option<String>,
+        
+        /// End time for range: YYYY-MM-DD HH:MM
+        #[arg(long)]
+        end: Option<String>,
+        
+        /// Generate interactive HTML chart instead of static PNG
+        #[arg(long)]
+        interactive: bool,
+        
+        /// Number of time segments for chart aggregation (default: 100)
+        #[arg(long, default_value = "100")]
+        segments: usize,
+    },
+    
+    /// Clean up old data
+    Cleanup {
+        /// Delete all data before this date (format: YYYY-MM-DD)
+        #[arg(long, required = true)]
+        before: String,
+        
+        /// Keep hourly aggregations, only delete raw measurements
+        #[arg(long)]
+        keep_aggregations: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
@@ -75,25 +146,42 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     
     info!("Bufferbane v0.1.0 - Network Quality Monitoring");
-    info!("Phase 1: Standalone ICMP monitoring with chart export");
     
     // Load configuration
     let config = config::Config::load(&args.config)?;
     info!("Loaded configuration from {:?}", args.config);
     
-    // Handle different modes
-    if args.export {
-        // Export mode
-        info!("Export mode");
-        run_export(&config, &args).await?;
-    } else if args.chart {
-        // Chart generation mode
-        info!("Chart generation mode");
-        run_chart(&config, &args).await?;
-    } else {
-        // Monitoring mode (default)
-        info!("Starting monitoring mode");
-        run_monitoring(&config, args.quiet).await?;
+    // Handle subcommands or backwards-compatible flags
+    match args.command {
+        Some(Command::Monitor { quiet }) => {
+            info!("Starting monitoring mode");
+            run_monitoring(&config, quiet).await?;
+        }
+        Some(Command::Export { output, last, start, end }) => {
+            info!("Export mode");
+            run_export_subcommand(&config, output, last, start, end).await?;
+        }
+        Some(Command::Chart { output, last, start, end, interactive, segments }) => {
+            info!("Chart generation mode");
+            run_chart_subcommand(&config, output, last, start, end, interactive, segments).await?;
+        }
+        Some(Command::Cleanup { before, keep_aggregations }) => {
+            info!("Cleanup mode");
+            run_cleanup(&config, &before, keep_aggregations).await?;
+        }
+        None => {
+            // Backwards compatibility: use old-style flags
+            if args.export {
+                info!("Export mode (legacy)");
+                run_export_subcommand(&config, args.output, args.last, args.start, args.end).await?;
+            } else if args.chart {
+                info!("Chart generation mode (legacy)");
+                run_chart_subcommand(&config, args.output, args.last, args.start, args.end, args.interactive, args.segments).await?;
+            } else {
+                info!("Starting monitoring mode (default)");
+                run_monitoring(&config, args.quiet).await?;
+            }
+        }
     }
     
     Ok(())
@@ -116,7 +204,7 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     let mut gateway_monitor = if config.monitoring.auto_detect_gateway {
         let mut monitor = network_monitor::GatewayMonitor::new();
         // Check immediately on startup
-        let detected_gateway = monitor.check();
+        let _detected_gateway = monitor.check();
         info!("Gateway monitoring enabled (check interval: {}s)", config.monitoring.gateway_check_interval_sec);
         Some(monitor)
     } else {
@@ -228,8 +316,31 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     // Make server_tester mutable for running tests
     let mut server_tester = server_tester;
     
+    // Calculate next aggregation time
+    let mut next_aggregation_time = calculate_next_aggregation_time(&config.retention.aggregation_time);
+    
+    info!("Next aggregation scheduled for: {}", next_aggregation_time.format("%Y-%m-%d %H:%M:%S"));
+    
     loop {
         interval.tick().await;
+        
+        // Check if it's time to run aggregation
+        let now = chrono::Local::now();
+        if now >= next_aggregation_time {
+            info!("Starting automatic data aggregation");
+            match run_aggregation_job(&db, config.retention.measurements_days).await {
+                Ok((aggregated, deleted)) => {
+                    info!("Aggregation complete: {} records aggregated, {} raw measurements deleted", 
+                          aggregated, deleted);
+                }
+                Err(e) => {
+                    error!("Aggregation job failed: {}", e);
+                }
+            }
+            // Calculate next aggregation time
+            next_aggregation_time = calculate_next_aggregation_time(&config.retention.aggregation_time);
+            info!("Next aggregation scheduled for: {}", next_aggregation_time.format("%Y-%m-%d %H:%M:%S"));
+        }
         
         // Check gateway periodically
         if let Some(ref mut monitor) = gateway_monitor {
@@ -349,22 +460,28 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
     }
 }
 
-async fn run_export(config: &config::Config, args: &Args) -> Result<()> {
+async fn run_export_subcommand(
+    config: &config::Config, 
+    output: Option<PathBuf>,
+    last: Option<String>,
+    start: Option<String>,
+    end: Option<String>
+) -> Result<()> {
     info!("Running export...");
     
     // Determine time range
-    let (start, end) = parse_time_range(args)?;
+    let (start_ts, end_ts) = parse_time_range_params(last, start, end)?;
     
     // Initialize database
     let db = storage::Database::new(&config.general.database_path)?;
     
     // Query measurements
-    let measurements = db.query_range(start, end)?;
+    let measurements = db.query_range(start_ts, end_ts)?;
     
     info!("Found {} measurements", measurements.len());
     
     // Determine output file
-    let output_path = args.output.clone().unwrap_or_else(|| {
+    let output_path = output.unwrap_or_else(|| {
         PathBuf::from(format!("bufferbane_export_{}.csv", chrono::Local::now().format("%Y%m%d_%H%M%S")))
     });
     
@@ -376,17 +493,25 @@ async fn run_export(config: &config::Config, args: &Args) -> Result<()> {
     Ok(())
 }
 
-async fn run_chart(config: &config::Config, args: &Args) -> Result<()> {
+async fn run_chart_subcommand(
+    config: &config::Config,
+    output: Option<PathBuf>,
+    last: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    interactive: bool,
+    segments: usize
+) -> Result<()> {
     info!("Generating chart...");
     
     // Determine time range
-    let (start, end) = parse_time_range(args)?;
+    let (start_ts, end_ts) = parse_time_range_params(last, start, end)?;
     
     // Initialize database
     let db = storage::Database::new(&config.general.database_path)?;
     
     // Query measurements
-    let measurements = db.query_range(start, end)?;
+    let measurements = db.query_range(start_ts, end_ts)?;
     
     info!("Found {} measurements", measurements.len());
     
@@ -395,8 +520,8 @@ async fn run_chart(config: &config::Config, args: &Args) -> Result<()> {
     }
     
     // Determine output file
-    let output_path = args.output.clone().unwrap_or_else(|| {
-        if args.interactive {
+    let output_path = output.unwrap_or_else(|| {
+        if interactive {
             PathBuf::from(format!("latency_{}.html", chrono::Local::now().format("%Y%m%d_%H%M%S")))
         } else {
             PathBuf::from(format!("latency_{}.png", chrono::Local::now().format("%Y%m%d_%H%M%S")))
@@ -404,40 +529,230 @@ async fn run_chart(config: &config::Config, args: &Args) -> Result<()> {
     });
     
     // Generate chart with min/max/avg/percentile lines
-    info!("Using {} time segments for aggregation", args.segments);
-    if args.interactive {
-        charts::generate_interactive_chart(&measurements, &output_path, config, args.segments, Some(&db))?;
+    info!("Using {} time segments for aggregation", segments);
+    if interactive {
+        charts::generate_interactive_chart(&measurements, &output_path, config, segments, Some(&db))?;
         info!("Interactive chart saved to {:?}", output_path);
         info!("Open the file in your web browser to view the interactive chart");
     } else {
-        charts::generate_latency_chart(&measurements, &output_path, config, args.segments, Some(&db))?;
+        charts::generate_latency_chart(&measurements, &output_path, config, segments, Some(&db))?;
         info!("Chart saved to {:?}", output_path);
     }
     
     Ok(())
 }
 
-fn parse_time_range(args: &Args) -> Result<(i64, i64)> {
-    if let Some(last) = &args.last {
+fn calculate_next_aggregation_time(aggregation_time_str: &str) -> chrono::DateTime<chrono::Local> {
+    let now = chrono::Local::now();
+    
+    let (hour, minute) = match parse_time_of_day(aggregation_time_str) {
+        Ok(time) => time,
+        Err(e) => {
+            error!("Invalid aggregation_time format: {}. Using 03:00 as default", e);
+            (3, 0)
+        }
+    };
+    
+    let mut target_dt = now
+        .date_naive()
+        .and_hms_opt(hour, minute, 0)
+        .unwrap()
+        .and_local_timezone(chrono::Local)
+        .unwrap();
+    
+    // If target time has already passed today, schedule for tomorrow
+    if target_dt <= now {
+        target_dt = target_dt + chrono::Duration::days(1);
+    }
+    
+    target_dt
+}
+
+async fn run_aggregation_job(
+    db: &storage::Database, 
+    retention_days: u32
+) -> Result<(usize, usize)> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    
+    let cutoff_timestamp = now - (retention_days as i64 * 86400);
+    
+    // Find the oldest unaggregated data
+    let oldest = db.get_oldest_unaggregated_timestamp(retention_days)?;
+    
+    if oldest.is_none() {
+        info!("No data needs aggregation");
+        return Ok((0, 0));
+    }
+    
+    let oldest_ts = oldest.unwrap();
+    
+    // Aggregate data in daily chunks to avoid memory issues
+    let mut current_start = oldest_ts;
+    let mut total_aggregated = 0;
+    
+    while current_start < cutoff_timestamp {
+        let current_end = (current_start + 86400).min(cutoff_timestamp);
+        
+        info!("Aggregating data from {} to {}", 
+              chrono::DateTime::from_timestamp(current_start, 0)
+                  .unwrap()
+                  .format("%Y-%m-%d %H:%M:%S"),
+              chrono::DateTime::from_timestamp(current_end, 0)
+                  .unwrap()
+                  .format("%Y-%m-%d %H:%M:%S"));
+        
+        match db.aggregate_to_hourly(current_start, current_end) {
+            Ok(count) => {
+                total_aggregated += count;
+                info!("Aggregated {} hourly records for this period", count);
+            }
+            Err(e) => {
+                error!("Failed to aggregate period: {}", e);
+            }
+        }
+        
+        current_start = current_end;
+    }
+    
+    // Delete raw measurements after successful aggregation
+    info!("Deleting raw measurements older than {} days", retention_days);
+    let deleted = db.delete_measurements_before(cutoff_timestamp)?;
+    
+    info!("Deleted {} raw measurements", deleted);
+    
+    // Optimize database
+    info!("Optimizing database");
+    db.vacuum()?;
+    
+    Ok((total_aggregated, deleted))
+}
+
+fn parse_time_of_day(time_str: &str) -> Result<(u32, u32)> {
+    let parts: Vec<&str> = time_str.split(':').collect();
+    if parts.len() != 2 {
+        anyhow::bail!("Invalid time format. Expected HH:MM");
+    }
+    
+    let hour: u32 = parts[0].parse()
+        .with_context(|| "Invalid hour")?;
+    let minute: u32 = parts[1].parse()
+        .with_context(|| "Invalid minute")?;
+    
+    if hour > 23 || minute > 59 {
+        anyhow::bail!("Invalid time: hour must be 0-23, minute must be 0-59");
+    }
+    
+    Ok((hour, minute))
+}
+
+async fn run_cleanup(config: &config::Config, before_date: &str, keep_aggregations: bool) -> Result<()> {
+    info!("Running cleanup for data before {}", before_date);
+    
+    // Parse the date
+    let before_ts = chrono::NaiveDate::parse_from_str(before_date, "%Y-%m-%d")
+        .with_context(|| format!("Invalid date format '{}'. Expected YYYY-MM-DD", before_date))?
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| anyhow::anyhow!("Invalid time"))?
+        .and_utc()
+        .timestamp();
+    
+    // Initialize database
+    let db = storage::Database::new(&config.general.database_path)?;
+    
+    // Count what would be deleted
+    let (raw_count, agg_count) = db.count_records_before(before_ts)?;
+    
+    // Show confirmation prompt
+    println!("\n╔════════════════════════════════════════════════════╗");
+    println!("║           DATA CLEANUP CONFIRMATION               ║");
+    println!("╚════════════════════════════════════════════════════╝");
+    println!();
+    println!("  Delete all data before: {}", before_date);
+    println!();
+    println!("  This will delete:");
+    println!("    • {} raw measurements", raw_count);
+    if !keep_aggregations {
+        println!("    • {} hourly aggregations", agg_count);
+    } else {
+        println!("    • Hourly aggregations will be KEPT");
+    }
+    println!();
+    
+    if raw_count == 0 && (keep_aggregations || agg_count == 0) {
+        println!("  No data to delete.");
+        return Ok(());
+    }
+    
+    print!("  Continue? [y/N]: ");
+    std::io::Write::flush(&mut std::io::stdout())?;
+    
+    // Read confirmation
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    
+    if input.trim().to_lowercase() == "y" {
+        println!();
+        println!("  Deleting data...");
+        
+        // Perform deletion
+        let (deleted_raw, deleted_agg) = if keep_aggregations {
+            let deleted = db.delete_measurements_before(before_ts)?;
+            (deleted, 0)
+        } else {
+            db.delete_all_before(before_ts)?
+        };
+        
+        println!();
+        println!("  ✓ Cleanup complete:");
+        println!("    • Deleted {} raw measurements", deleted_raw);
+        if !keep_aggregations {
+            println!("    • Deleted {} hourly aggregations", deleted_agg);
+        }
+        
+        // Optimize database after deletion
+        info!("Optimizing database...");
+        db.vacuum()?;
+        println!("    • Database optimized");
+        println!();
+    } else {
+        println!();
+        println!("  Cleanup cancelled.");
+        println!();
+    }
+    
+    Ok(())
+}
+
+fn parse_time_range_params(
+    last: Option<String>,
+    start: Option<String>,
+    end: Option<String>
+) -> Result<(i64, i64)> {
+    if let Some(last) = last {
         // Parse --last 24h, 7d, etc.
-        let duration = parse_duration(last)?;
-        let end = chrono::Utc::now().timestamp();
-        let start = end - duration.num_seconds();
-        Ok((start, end))
-    } else if let (Some(start_str), Some(end_str)) = (&args.start, &args.end) {
+        let duration = parse_duration(&last)?;
+        let end_ts = chrono::Utc::now().timestamp();
+        let start_ts = end_ts - duration.num_seconds();
+        Ok((start_ts, end_ts))
+    } else if let (Some(start_str), Some(end_str)) = (start, end) {
         // Parse --start and --end
-        let start = chrono::NaiveDateTime::parse_from_str(start_str, "%Y-%m-%d %H:%M")?
+        let start_ts = chrono::NaiveDateTime::parse_from_str(&start_str, "%Y-%m-%d %H:%M")?
             .and_utc()
             .timestamp();
-        let end = chrono::NaiveDateTime::parse_from_str(end_str, "%Y-%m-%d %H:%M")?
+        let end_ts = chrono::NaiveDateTime::parse_from_str(&end_str, "%Y-%m-%d %H:%M")?
             .and_utc()
             .timestamp();
-        Ok((start, end))
+        Ok((start_ts, end_ts))
     } else {
         // Default: last 24 hours
-        let end = chrono::Utc::now().timestamp();
-        let start = end - 24 * 3600;
-        Ok((start, end))
+        let end_ts = chrono::Utc::now().timestamp();
+        let start_ts = end_ts - 24 * 3600;
+        Ok((start_ts, end_ts))
     }
 }
 

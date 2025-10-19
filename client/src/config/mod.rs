@@ -71,9 +71,10 @@ pub struct AlertsConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RetentionConfig {
     pub measurements_days: u32,
-    pub aggregations_days: u32,
-    pub events_days: u32,
-    pub cleanup_time: String,
+    pub aggregations_days: u32,  // 0 = forever
+    pub events_days: u32,        // 0 = forever
+    #[serde(default = "default_aggregation_time")]
+    pub aggregation_time: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -157,6 +158,10 @@ fn default_public_ip_check_interval() -> u64 {
 
 fn default_public_ip_service() -> String {
     "https://api.ipify.org".to_string()
+}
+
+fn default_aggregation_time() -> String {
+    "03:00".to_string()
 }
 
 impl Config {

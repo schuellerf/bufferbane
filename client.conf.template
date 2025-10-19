@@ -162,17 +162,21 @@ packet_loss_threshold_pct = 5.0
 # How long to keep different types of data
 
 # Raw measurements (per-second data)
+# After this period, data is automatically aggregated to hourly statistics
 measurements_days = 30
 
-# Aggregated data (1-minute and 1-hour rollups)
-aggregations_days = 90
+# Hourly aggregations (min, max, avg, P50, P95, P99 statistics)
+# Set to 0 to keep forever
+# Manual cleanup available: bufferbane cleanup --before YYYY-MM-DD
+aggregations_days = 0           # 0 = keep forever
 
 # Events (alerts and detected issues)
 # Set to 0 to keep forever
 events_days = 0                 # 0 = keep forever
 
-# Automatic cleanup: Run cleanup job at this time daily (HH:MM format)
-cleanup_time = "03:00"
+# Automatic aggregation: Run aggregation job at this time daily (HH:MM format, 24h)
+# This job aggregates data older than measurements_days into hourly statistics
+aggregation_time = "03:00"
 
 [output]
 # Console output configuration

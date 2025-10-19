@@ -457,11 +457,23 @@ CREATE TABLE events (
 
 ### Data Retention
 
-- Raw measurements: Keep for 30 days
-- 1-minute aggregations: Keep for 90 days
-- 1-hour aggregations: Keep for 1 year
-- Events: Keep indefinitely
-- Automatic cleanup job runs daily
+**Automatic Aggregation Strategy**:
+- Raw measurements: Keep for 30 days, then automatically aggregated to hourly statistics
+- Hourly aggregations: Kept forever (includes min, max, avg, P50, P95, P99 percentiles)
+- Events: Kept forever
+- Automatic aggregation job runs daily at configured time (default: 03:00)
+
+**Manual Cleanup**:
+- Command-line tool available to delete data older than a specified date
+- Requires confirmation before deletion
+- Can delete both raw and aggregated data, or only raw data
+- Usage: `bufferbane cleanup --before YYYY-MM-DD [--keep-aggregations]`
+
+**Rationale**:
+- After 30 days, per-second granularity is less critical for analysis
+- Hourly statistics provide sufficient detail for long-term trend analysis
+- Keeping aggregations forever allows unlimited historical comparison
+- Manual cleanup provides control for disk space management if needed
 
 ### Real-time Statistics
 
