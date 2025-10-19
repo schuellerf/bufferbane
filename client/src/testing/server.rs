@@ -266,14 +266,59 @@ impl ServerTester {
         // Calculate raw offset for this measurement
         let measured_offset_ns = ((t2 - t1) + (t3 - t4)) / 2.0;
         
+        // Validate the measured offset to detect anomalies
+        // If offset would make upload or download negative or greater than RTT, it's likely wrong
+        let test_upload = (t2 - t1) - measured_offset_ns;
+        let test_download = (t4 - t3) + measured_offset_ns;
+        let rtt_ns = rtt * 1_000_000.0;
+        
+        // Check if this measurement produces reasonable values
+        let offset_is_valid = test_upload > 0.0 
+            && test_download > 0.0 
+            && test_upload < rtt_ns 
+            && test_download < rtt_ns;
+        
         // Update moving average (Exponential Moving Average)
         if self.sequence == 1 {
-            // First measurement - use it directly
-            self.clock_offset_ns = measured_offset_ns;
+            // First measurement - use it only if valid, otherwise use 0
+            if offset_is_valid {
+                self.clock_offset_ns = measured_offset_ns;
+            } else {
+                self.clock_offset_ns = 0.0;
+                debug!(
+                    "First offset measurement rejected for {} (would produce invalid latencies), using 0",
+                    self.config.host
+                );
+            }
         } else {
-            // Smooth with EMA: new_avg = alpha * new_sample + (1-alpha) * old_avg
-            self.clock_offset_ns = self.offset_ema_alpha * measured_offset_ns 
-                                    + (1.0 - self.offset_ema_alpha) * self.clock_offset_ns;
+            // Detect large offset changes (> 50ms) which indicate problems
+            let offset_change_ns = (measured_offset_ns - self.clock_offset_ns).abs();
+            let offset_change_ms = offset_change_ns / 1_000_000.0;
+            
+            if !offset_is_valid {
+                // Skip this measurement if it would produce invalid results
+                debug!(
+                    "Offset measurement rejected for {} (invalid latencies: up={:.2}ms, down={:.2}ms)",
+                    self.config.host, test_upload / 1_000_000.0, test_download / 1_000_000.0
+                );
+                // Don't update offset, use previous value
+            } else if offset_change_ms > 50.0 {
+                // Large offset change detected - might be clock adjustment or bad packet
+                // Use faster adaptation (higher alpha) to recover
+                warn!(
+                    "Large offset change detected for {}: {:.2}ms -> {:.2}ms (change: {:.2}ms)",
+                    self.config.host,
+                    self.clock_offset_ns / 1_000_000.0,
+                    measured_offset_ns / 1_000_000.0,
+                    offset_change_ms
+                );
+                // Use 50% weight for fast recovery
+                self.clock_offset_ns = 0.5 * measured_offset_ns + 0.5 * self.clock_offset_ns;
+            } else {
+                // Normal case: smooth with EMA
+                self.clock_offset_ns = self.offset_ema_alpha * measured_offset_ns 
+                                        + (1.0 - self.offset_ema_alpha) * self.clock_offset_ns;
+            }
         }
         
         // Apply offset correction to get true one-way latencies
