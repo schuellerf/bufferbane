@@ -198,13 +198,11 @@ make windows            # Cross-compile for Windows
 ## Documentation
 
 - **[INSTALL.md](INSTALL.md)** - Complete installation guide with troubleshooting
+- **[UBUNTU_SETUP.md](UBUNTU_SETUP.md)** - Ubuntu-specific ICMP setup (no sudo required)
+- **[DATA_AGGREGATION_README.md](DATA_AGGREGATION_README.md)** - Data retention and cleanup
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
+- **[docs/USAGE.md](docs/USAGE.md)** - Usage examples and command reference
 - **[docs/planning/](docs/planning/)** - Technical specifications and research
-
-**Key docs**:
-- [BUILT_IN_CLOCK_SYNC.md](BUILT_IN_CLOCK_SYNC.md) - Clock synchronization algorithm
-- [INTERACTIVE_LEGEND.md](INTERACTIVE_LEGEND.md) - Interactive chart features
-- [TEMPLATE_REFACTORING.md](TEMPLATE_REFACTORING.md) - Code architecture
 
 ---
 
