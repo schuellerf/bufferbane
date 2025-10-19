@@ -145,10 +145,14 @@
             <div id="tooltip"></div>
         </div>
         
-        <div style="margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 4px;">
+        <div style="margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 4px; display: flex; gap: 30px; align-items: center;">
             <label style="cursor: pointer; user-select: none;">
                 <input type="checkbox" id="logScaleToggle" style="margin-right: 8px;">
                 Logarithmic Y-axis
+            </label>
+            <label style="cursor: pointer; user-select: none;">
+                <input type="checkbox" id="showEventsToggle" style="margin-right: 8px;" checked>
+                Show Events
             </label>
         </div>
         
@@ -173,6 +177,9 @@
         
         // Track logarithmic scale toggle
         let useLogScale = false;
+        
+        // Track events visibility
+        let showEvents = true;
         
         const minTime = {{MIN_TIME}};
         const maxTime = {{MAX_TIME}};
@@ -315,7 +322,14 @@
             // Draw data lines (breaking at gaps > 5 minutes)
             // Data format: [window_start, window_end, count, min, max, avg, p95, p99]
             const MAX_GAP_SECONDS = 300;  // 5 minutes
-            Object.entries(data).forEach(([target, windows], idx) => {
+            
+            // Separate hovered series to draw it last (on top)
+            const entries = Object.entries(data);
+            const hoveredEntry = entries.find(([target]) => target === hoveredSeries);
+            const otherEntries = entries.filter(([target]) => target !== hoveredSeries);
+            
+            // Draw non-hovered series first
+            const drawSeries = (target, windows, idx) => {
                 // Skip hidden series
                 if (!seriesVisible[target]) {
                     return;
@@ -462,7 +476,19 @@
                     ctx.setLineDash([]);  // Reset dash pattern
                     ctx.globalAlpha = 1.0;  // Reset alpha
                 });
+            };
+            
+            // Draw all non-hovered series first
+            otherEntries.forEach(([target, windows], idx) => {
+                drawSeries(target, windows, idx);
             });
+            
+            // Draw hovered series last (on top) if it exists
+            if (hoveredEntry) {
+                const [target, windows] = hoveredEntry;
+                const idx = entries.findIndex(([t]) => t === target);
+                drawSeries(target, windows, idx);
+            }
             
             // Draw event markers on chart
             drawEventMarkers();
@@ -473,7 +499,17 @@
         
         // Draw event markers on the main chart
         function drawEventMarkers() {
-            events.forEach(event => {
+            // Filter events based on visibility settings
+            const visibleEvents = events.filter(event => {
+                // Check if events are globally shown
+                if (!showEvents) return false;
+                
+                // Check if the event's target series is visible
+                // Events are associated with targets, so hide events for hidden series
+                return seriesVisible[event.target] !== false;
+            });
+            
+            visibleEvents.forEach(event => {
                 const x = timeToX(event.timestamp);
                 
                 // Determine color based on event type
@@ -530,8 +566,17 @@
             ctx.textAlign = 'right';
             ctx.fillText('Events:', padding.left - 10, timelineY + 25);
             
+            // Filter events based on visibility settings
+            const visibleEvents = events.filter(event => {
+                // Check if events are globally shown
+                if (!showEvents) return false;
+                
+                // Check if the event's target series is visible
+                return seriesVisible[event.target] !== false;
+            });
+            
             // Draw events as colored bars
-            events.forEach(event => {
+            visibleEvents.forEach(event => {
                 const x = timeToX(event.timestamp);
                 
                 // Determine color
@@ -587,9 +632,14 @@
                 });
             });
             
-            // Also check for nearby events
+            // Also check for nearby events (only visible ones)
             let nearbyEvents = [];
             events.forEach(event => {
+                // Only check visible events
+                if (!showEvents || seriesVisible[event.target] === false) {
+                    return;
+                }
+                
                 const eventX = timeToX(event.timestamp);
                 const dist = Math.abs(mouseX - eventX);
                 if (dist < 15) {
@@ -762,6 +812,12 @@
         // Log scale toggle event listener
         document.getElementById('logScaleToggle').addEventListener('change', (e) => {
             useLogScale = e.target.checked;
+            drawChart();
+        });
+        
+        // Show events toggle event listener
+        document.getElementById('showEventsToggle').addEventListener('change', (e) => {
+            showEvents = e.target.checked;
             drawChart();
         });
         
