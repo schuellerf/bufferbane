@@ -1,8 +1,9 @@
-# Cargo configuration for cross-compilation
+# Cargo build configuration
 
 [target.x86_64-unknown-linux-musl]
-linker = "musl-gcc"
+# Use vendored OpenSSL for static musl builds
+rustflags = ["-C", "target-feature=+crt-static"]
 
-[target.x86_64-pc-windows-gnu]
-linker = "x86_64-w64-mingw32-gcc"
-
+[env]
+# Vendor OpenSSL for musl builds to avoid dynamic linking issues
+OPENSSL_STATIC = "1"

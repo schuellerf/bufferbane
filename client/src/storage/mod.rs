@@ -457,6 +457,7 @@ impl Database {
     }
     
     /// Query hourly aggregations for a time range
+    #[allow(dead_code)]
     pub fn query_hourly_range(&self, start: i64, end: i64) -> Result<Vec<HourlyAggregation>> {
         let mut stmt = self.conn.prepare(
             "SELECT 
@@ -539,6 +540,7 @@ pub struct Event {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct HourlyAggregation {
     pub hour_timestamp: i64,
     pub interface: String,

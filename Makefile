@@ -19,7 +19,7 @@ INSTALL_GROUP ?= $(shell id -gn $(INSTALL_USER))
 # Detect home directory for user
 USER_HOME = $(shell getent passwd $(INSTALL_USER) | cut -d: -f6)
 
-.PHONY: all build build-client build-server build-server-static test clean clean-data install uninstall install-service uninstall-service windows windows-setup help
+.PHONY: all build build-client build-server build-client-static build-server-static build-static test clean clean-data install uninstall install-service uninstall-service windows windows-setup help
 
 # Default target
 all: build
@@ -43,6 +43,21 @@ build-server:
 	@echo "Building Bufferbane server (release mode)..."
 	cargo build $(RELEASE_FLAGS) -p bufferbane-server
 	@echo "Build complete: $(BUILD_DIR)/bufferbane-server"
+
+# Build client with musl (fully static, works on any Linux)
+# Note: Static builds currently don't support PNG charts due to fontconfig dependency
+# Workaround: Use interactive HTML charts instead (--chart --interactive)
+build-client-static:
+	@echo "==================================================================="
+	@echo "NOTICE: Static builds (musl) don't support PNG charts"
+	@echo "Reason: fontconfig/freetype static libraries not available for musl"
+	@echo "Workaround: Use interactive HTML charts: --chart --interactive"
+	@echo "==================================================================="
+	@echo ""
+	@echo "Building client with regular build instead."
+	@echo "For true static server builds, use: make build-server-static"
+	@echo ""
+	@$(MAKE) build-client
 
 # Build server with musl (fully static, works on any Linux)
 build-server-static:
@@ -68,6 +83,21 @@ build-server-static:
 	@echo "✓ Build complete: target/x86_64-unknown-linux-musl/release/bufferbane-server"
 	@echo "✓ This binary works on any Linux (no GLIBC version dependency)"
 	@ls -lh target/x86_64-unknown-linux-musl/release/bufferbane-server
+
+# Build both client and server (server static, client regular)
+build-static:
+	@echo "==================================================================="
+	@echo "Building Bufferbane (hybrid static build)"
+	@echo "  - Client: Regular build (PNG charts supported)"
+	@echo "  - Server: Static musl build (works on any Linux)"
+	@echo "==================================================================="
+	@echo ""
+	@$(MAKE) build-client
+	@$(MAKE) build-server-static
+	@echo ""
+	@echo "✓ Build complete (hybrid):"
+	@echo "  Client: $(BUILD_DIR)/bufferbane (regular, full features)"
+	@echo "  Server: target/x86_64-unknown-linux-musl/release/bufferbane-server (static)"
 
 # Run tests
 test:
@@ -260,13 +290,15 @@ help:
 	@echo "Bufferbane - Network Quality Monitoring"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make build              Build client and server (release mode)"
-	@echo "  make build-client       Build only the client"
-	@echo "  make build-server       Build only the server (Phase 2)"
-	@echo "  make build-server-static Build server with musl (works on any Linux)"
-	@echo "  make test               Run tests"
-	@echo "  make clean              Clean build artifacts"
-	@echo "  make clean-data         Clean generated data (db, charts, exports, logs)"
+	@echo "  make build               Build client and server (release mode)"
+	@echo "  make build-client        Build only the client"
+	@echo "  make build-server        Build only the server (Phase 2)"
+	@echo "  make build-client-static Build client (fallback to regular, PNG charts need libs)"
+	@echo "  make build-server-static Build server with musl (static, works on any Linux)"
+	@echo "  make build-static        Hybrid: client regular + server static (recommended)"
+	@echo "  make test                Run tests"
+	@echo "  make clean               Clean build artifacts"
+	@echo "  make clean-data          Clean generated data (db, charts, exports, logs)"
 	@echo ""
 	@echo "  make chart              Generate PNG chart (last 24h)"
 	@echo "  make chart-interactive  Generate HTML chart (last 24h)"

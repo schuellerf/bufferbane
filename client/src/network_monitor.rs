@@ -155,10 +155,6 @@ impl PublicIpMonitor {
         }
     }
     
-    pub fn get_current_ip(&self) -> Option<IpAddr> {
-        self.current_ip
-    }
-    
     pub fn get_check_interval(&self) -> u64 {
         self.check_interval_sec
     }
