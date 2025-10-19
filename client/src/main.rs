@@ -64,6 +64,10 @@ struct Args {
     /// Quiet mode: Log hourly statistics instead of every ping (for systemd service)
     #[arg(short, long)]
     quiet: bool,
+    
+    /// Verbose mode: Show every ping result (default shows 5-minute summaries)
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -73,6 +77,10 @@ enum Command {
         /// Quiet mode: Log hourly statistics instead of every ping
         #[arg(short, long)]
         quiet: bool,
+        
+        /// Verbose mode: Show every ping result
+        #[arg(short, long)]
+        verbose: bool,
     },
     
     /// Export measurement data to CSV
@@ -153,9 +161,9 @@ async fn main() -> Result<()> {
     
     // Handle subcommands or backwards-compatible flags
     match args.command {
-        Some(Command::Monitor { quiet }) => {
+        Some(Command::Monitor { quiet, verbose }) => {
             info!("Starting monitoring mode");
-            run_monitoring(&config, quiet).await?;
+            run_monitoring(&config, quiet, verbose).await?;
         }
         Some(Command::Export { output, last, start, end }) => {
             info!("Export mode");
@@ -179,7 +187,7 @@ async fn main() -> Result<()> {
                 run_chart_subcommand(&config, args.output, args.last, args.start, args.end, args.interactive, args.segments).await?;
             } else {
                 info!("Starting monitoring mode (default)");
-                run_monitoring(&config, args.quiet).await?;
+                run_monitoring(&config, args.quiet, args.verbose).await?;
             }
         }
     }
@@ -187,12 +195,16 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
+async fn run_monitoring(config: &config::Config, quiet: bool, verbose: bool) -> Result<()> {
     info!("Initializing monitoring...");
     info!("Test interval: {}ms", config.general.test_interval_ms);
     info!("Database: {:?}", config.general.database_path);
     if quiet {
         info!("Quiet mode: Logging hourly statistics only");
+    } else if verbose {
+        info!("Verbose mode: Showing every ping result");
+    } else {
+        info!("Normal mode: Logging 5-minute summaries (starting after 5 seconds)");
     }
     
     // Initialize database
@@ -285,9 +297,13 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
         tokio::time::Duration::from_millis(config.general.test_interval_ms)
     );
     
-    // For hourly statistics in quiet mode
+    // For statistics in quiet and normal modes
     let mut hourly_stats = HourlyStats::new();
-    let mut last_stats_log = chrono::Local::now();
+    let mut periodic_stats = HourlyStats::new();  // Reuse same struct for 5-min stats
+    let mut last_hourly_log = chrono::Local::now();
+    let mut last_periodic_log = chrono::Local::now();
+    let startup_time = chrono::Local::now();
+    let mut first_summary_shown = false;
     
     // Track last IP and gateway check times
     let mut last_ip_check = chrono::Local::now();
@@ -439,21 +455,44 @@ async fn run_monitoring(config: &config::Config, quiet: bool) -> Result<()> {
                 error!("Alert check failed: {}", e);
             }
             
-            // Update output or statistics
+            // Update output or statistics based on mode
+            let now = chrono::Local::now();
+            
             if quiet {
-                // Quiet mode: accumulate stats
+                // Quiet mode: accumulate stats, log hourly
                 hourly_stats.add_measurements(&all_measurements);
                 
-                // Log hourly statistics
-                let now = chrono::Local::now();
-                if now.signed_duration_since(last_stats_log).num_minutes() >= 60 {
+                if now.signed_duration_since(last_hourly_log).num_minutes() >= 60 {
                     hourly_stats.log_and_reset();
-                    last_stats_log = now;
+                    last_hourly_log = now;
                 }
-            } else {
-                // Normal mode: show every measurement
+            } else if verbose {
+                // Verbose mode: show every measurement
                 if let Err(e) = output_handle.update(&all_measurements) {
                     error!("Output update failed: {}", e);
+                }
+            } else {
+                // Normal mode: accumulate stats, log every 5 minutes (starting after 5 seconds)
+                periodic_stats.add_measurements(&all_measurements);
+                
+                let seconds_since_startup = now.signed_duration_since(startup_time).num_seconds();
+                let seconds_since_last_log = now.signed_duration_since(last_periodic_log).num_seconds();
+                
+                // Show first summary after 5 seconds, then every 5 minutes
+                let should_log = if !first_summary_shown && seconds_since_startup >= 5 {
+                    // First summary after 5 seconds
+                    first_summary_shown = true;
+                    true
+                } else if first_summary_shown && seconds_since_last_log >= 300 {
+                    // Subsequent summaries every 5 minutes
+                    true
+                } else {
+                    false
+                };
+                
+                if should_log {
+                    periodic_stats.log_compact_and_reset(&db).await;
+                    last_periodic_log = now;
                 }
             }
         }
@@ -880,6 +919,77 @@ impl HourlyStats {
         info!("═══════════════════════");
         
         // Reset
+        self.measurements_per_target.clear();
+        self.total_measurements = 0;
+        self.failed_measurements = 0;
+    }
+    
+    async fn log_compact_and_reset(&mut self, db: &std::sync::Arc<storage::Database>) {
+        if self.total_measurements == 0 {
+            return;
+        }
+        
+        // Query events in the last 5 minutes for event counts
+        let now = chrono::Local::now().timestamp();
+        let five_min_ago = now - 300;
+        let event_counts = db.query_events(five_min_ago, now)
+            .map(|events| {
+                let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+                for event in events {
+                    *counts.entry(event.target).or_insert(0) += 1;
+                }
+                counts
+            })
+            .unwrap_or_default();
+        
+        // Build all lines first to calculate max width
+        let mut lines = Vec::new();
+        let time_str = chrono::Local::now().format("%H:%M:%S").to_string();
+        
+        for (target, stats) in &self.measurements_per_target {
+            let total_tests = stats.success_count + stats.packet_loss_count;
+            let events = event_counts.get(target).copied().unwrap_or(0);
+            
+            let line = if !stats.rtts.is_empty() {
+                let mut sorted = stats.rtts.clone();
+                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let min = sorted[0];
+                let max = sorted[sorted.len() - 1];
+                let avg = sorted.iter().sum::<f64>() / sorted.len() as f64;
+                
+                format!("{:20} {:3}/{:3} pkts  {:2} events  {:5.1}/{:5.1}/{:5.1}ms min/avg/max",
+                    target, stats.success_count, total_tests, events, min, avg, max)
+            } else {
+                format!("{:20} {:3}/{:3} pkts  {:2} events  NO DATA (all failed)",
+                    target, stats.success_count, total_tests, events)
+            };
+            
+            lines.push(line);
+        }
+        
+        // Calculate box width
+        let header_line = format!("{} 5-Minute Summary", time_str);
+        let max_content_width = lines.iter()
+            .map(|l| l.len())
+            .max()
+            .unwrap_or(0)
+            .max(header_line.len());
+        
+        let box_width = max_content_width + 2; // Add 2 for padding (1 space on each side)
+        let border_line = "═".repeat(box_width);
+        
+        // Print the box
+        println!("\n╔{}╗", border_line);
+        println!("║ {:<width$} ║", header_line, width = max_content_width);
+        println!("╠{}╣", border_line);
+        
+        for line in lines {
+            println!("║ {:<width$} ║", line, width = max_content_width);
+        }
+        
+        println!("╚{}╝\n", border_line);
+        
+        // Reset for next period
         self.measurements_per_target.clear();
         self.total_measurements = 0;
         self.failed_measurements = 0;
