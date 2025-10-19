@@ -3,11 +3,14 @@
 use crate::config::Config;
 use crate::testing::Measurement;
 use anyhow::Result;
-use plotters::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
 
+#[cfg(feature = "png-charts")]
+use plotters::prelude::*;
+
 /// Generate latency chart with min/max/avg/percentile lines and shaded variance area
+#[cfg(feature = "png-charts")]
 pub fn generate_latency_chart(
     measurements: &[Measurement],
     output_path: &Path,
@@ -310,6 +313,27 @@ fn calculate_statistics(values: &[f64]) -> Statistics {
         p95,
         p99,
     }
+}
+
+/// Generate latency chart - stub version when PNG support is disabled
+#[cfg(not(feature = "png-charts"))]
+pub fn generate_latency_chart(
+    _measurements: &[Measurement],
+    output_path: &Path,
+    _config: &Config,
+    _num_segments: usize,
+    _db: Option<&crate::storage::Database>,
+) -> Result<()> {
+    anyhow::bail!(
+        "PNG chart export is not available in this build.\n\
+        This binary was compiled without PNG support for static linking.\n\
+        \n\
+        Alternatives:\n\
+        1. Use interactive HTML charts: bufferbane chart --interactive --output {}\n\
+        2. Rebuild with PNG support: cargo build --release --features png-charts\n\
+        3. Use the regular (non-static) build which includes PNG support",
+        output_path.with_extension("html").display()
+    )
 }
 
 /// Load and process HTML template for interactive charts

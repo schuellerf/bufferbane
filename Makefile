@@ -44,20 +44,39 @@ build-server:
 	cargo build $(RELEASE_FLAGS) -p bufferbane-server
 	@echo "Build complete: $(BUILD_DIR)/bufferbane-server"
 
-# Build client with musl (fully static, works on any Linux)
-# Note: Static builds currently don't support PNG charts due to fontconfig dependency
-# Workaround: Use interactive HTML charts instead (--chart --interactive)
+# Build client with musl (fully static, works on any Linux, no PNG charts)
 build-client-static:
-	@echo "==================================================================="
-	@echo "NOTICE: Static builds (musl) don't support PNG charts"
-	@echo "Reason: fontconfig/freetype static libraries not available for musl"
-	@echo "Workaround: Use interactive HTML charts: --chart --interactive"
-	@echo "==================================================================="
+	@echo "Building Bufferbane client with musl (static binary, no PNG support)..."
 	@echo ""
-	@echo "Building client with regular build instead."
-	@echo "For true static server builds, use: make build-server-static"
+	@echo "⚠️  PNG chart export is disabled in static builds"
+	@echo "    (fontconfig/freetype not available for static musl linking)"
 	@echo ""
-	@$(MAKE) build-client
+	@echo "    Use interactive HTML charts instead:"
+	@echo "    bufferbane chart --interactive --last 24h"
+	@echo ""
+	@# Check rustup and musl target
+	@if command -v rustup >/dev/null 2>&1; then \
+		if ! rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then \
+			echo "Installing musl target..."; \
+			rustup target add x86_64-unknown-linux-musl; \
+		fi; \
+	else \
+		echo "Warning: rustup not found. Install with:"; \
+		echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"; \
+		echo ""; \
+		if ! command -v musl-gcc >/dev/null 2>&1; then \
+			echo "Error: musl-gcc also not found. Install with:"; \
+			echo "  sudo dnf install -y musl-gcc musl-devel musl-libc-static"; \
+			exit 1; \
+		fi; \
+	fi
+	@# Build with musl target without png-charts feature
+	cargo build $(RELEASE_FLAGS) --target x86_64-unknown-linux-musl --no-default-features -p bufferbane
+	@echo ""
+	@echo "✓ Build complete: target/x86_64-unknown-linux-musl/release/bufferbane"
+	@echo "✓ This binary works on any Linux (no GLIBC version dependency)"
+	@echo "✓ HTML chart export is fully supported"
+	@ls -lh target/x86_64-unknown-linux-musl/release/bufferbane
 
 # Build server with musl (fully static, works on any Linux)
 build-server-static:
@@ -84,20 +103,23 @@ build-server-static:
 	@echo "✓ This binary works on any Linux (no GLIBC version dependency)"
 	@ls -lh target/x86_64-unknown-linux-musl/release/bufferbane-server
 
-# Build both client and server (server static, client regular)
+# Build both client and server with musl (fully static)
 build-static:
 	@echo "==================================================================="
-	@echo "Building Bufferbane (hybrid static build)"
-	@echo "  - Client: Regular build (PNG charts supported)"
-	@echo "  - Server: Static musl build (works on any Linux)"
+	@echo "Building Bufferbane (fully static musl build)"
+	@echo "  - Client: Static musl (HTML charts only, no PNG)"
+	@echo "  - Server: Static musl (works on any Linux)"
 	@echo "==================================================================="
 	@echo ""
-	@$(MAKE) build-client
+	@$(MAKE) build-client-static
+	@echo ""
 	@$(MAKE) build-server-static
 	@echo ""
-	@echo "✓ Build complete (hybrid):"
-	@echo "  Client: $(BUILD_DIR)/bufferbane (regular, full features)"
+	@echo "✓ Build complete (fully static):"
+	@echo "  Client: target/x86_64-unknown-linux-musl/release/bufferbane (static, no PNG)"
 	@echo "  Server: target/x86_64-unknown-linux-musl/release/bufferbane-server (static)"
+	@echo ""
+	@echo "These binaries work on any Linux distribution!"
 
 # Run tests
 test:
@@ -293,9 +315,9 @@ help:
 	@echo "  make build               Build client and server (release mode)"
 	@echo "  make build-client        Build only the client"
 	@echo "  make build-server        Build only the server (Phase 2)"
-	@echo "  make build-client-static Build client (fallback to regular, PNG charts need libs)"
+	@echo "  make build-client-static Build client with musl (static, HTML charts only)"
 	@echo "  make build-server-static Build server with musl (static, works on any Linux)"
-	@echo "  make build-static        Hybrid: client regular + server static (recommended)"
+	@echo "  make build-static        Build both with musl (fully static, portable)"
 	@echo "  make test                Run tests"
 	@echo "  make clean               Clean build artifacts"
 	@echo "  make clean-data          Clean generated data (db, charts, exports, logs)"
