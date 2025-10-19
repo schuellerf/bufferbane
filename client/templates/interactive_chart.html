@@ -145,6 +145,13 @@
             <div id="tooltip"></div>
         </div>
         
+        <div style="margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 4px;">
+            <label style="cursor: pointer; user-select: none;">
+                <input type="checkbox" id="logScaleToggle" style="margin-right: 8px;">
+                Logarithmic Y-axis
+            </label>
+        </div>
+        
         <div class="legend" id="legend"></div>
         
         <div class="stats" id="stats"></div>
@@ -161,10 +168,20 @@
         // Track visibility of each series
         const seriesVisible = {};
         
+        // Track hovered series for highlighting
+        let hoveredSeries = null;
+        
+        // Track logarithmic scale toggle
+        let useLogScale = false;
+        
         const minTime = {{MIN_TIME}};
         const maxTime = {{MAX_TIME}};
         const minRtt = {{MIN_RTT}};
         const maxRtt = {{MAX_RTT}};
+        
+        // Current visible range (updated dynamically)
+        let currentMinRtt = minRtt;
+        let currentMaxRtt = maxRtt;
         
         // Increase bottom padding to make room for event timeline
         const padding = { left: 80, right: 40, top: 60, bottom: 120 };
@@ -173,12 +190,45 @@
         const timelineY = padding.top + chartHeight + 80; // Timeline position
         const timelineHeight = 40;
         
+        // Calculate visible range based on currently visible series
+        function calculateVisibleRange() {
+            let visibleMin = Infinity;
+            let visibleMax = -Infinity;
+            
+            Object.entries(data).forEach(([target, windows]) => {
+                if (!seriesVisible[target]) return;
+                windows.forEach(window => {
+                    visibleMin = Math.min(visibleMin, window[3]); // min
+                    visibleMax = Math.max(visibleMax, window[4]); // max
+                });
+            });
+            
+            return visibleMin === Infinity ? 
+                { min: minRtt, max: maxRtt } : 
+                { min: visibleMin, max: visibleMax };
+        }
+        
         function timeToX(timestamp) {
             return padding.left + ((timestamp - minTime) / (maxTime - minTime)) * chartWidth;
         }
         
         function rttToY(rtt) {
-            return padding.top + chartHeight - ((rtt - minRtt) / (maxRtt - minRtt)) * chartHeight;
+            if (useLogScale) {
+                // Ensure positive values for log
+                const safeRtt = Math.max(rtt, 0.1);
+                const safeMin = Math.max(currentMinRtt, 0.1);
+                const safeMax = Math.max(currentMaxRtt, 0.1);
+                
+                const logRtt = Math.log10(safeRtt);
+                const logMin = Math.log10(safeMin);
+                const logMax = Math.log10(safeMax);
+                
+                return padding.top + chartHeight - 
+                    ((logRtt - logMin) / (logMax - logMin)) * chartHeight;
+            } else {
+                return padding.top + chartHeight - 
+                    ((rtt - currentMinRtt) / (currentMaxRtt - currentMinRtt)) * chartHeight;
+            }
         }
         
         function formatTime(timestamp) {
@@ -187,6 +237,11 @@
         }
         
         function drawChart() {
+            // Update visible range based on currently visible series
+            const range = calculateVisibleRange();
+            currentMinRtt = range.min;
+            currentMaxRtt = range.max;
+            
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -202,8 +257,18 @@
                 ctx.lineTo(padding.left + chartWidth, y);
                 ctx.stroke();
                 
-                // Y axis labels
-                const rtt = maxRtt - (maxRtt - minRtt) / 5 * i;
+                // Y axis labels - handle both linear and log scale
+                let rtt;
+                if (useLogScale) {
+                    const safeMin = Math.max(currentMinRtt, 0.1);
+                    const safeMax = Math.max(currentMaxRtt, 0.1);
+                    const logMin = Math.log10(safeMin);
+                    const logMax = Math.log10(safeMax);
+                    const logValue = logMax - (logMax - logMin) / 5 * i;
+                    rtt = Math.pow(10, logValue);
+                } else {
+                    rtt = currentMaxRtt - (currentMaxRtt - currentMinRtt) / 5 * i;
+                }
                 ctx.fillStyle = '#666';
                 ctx.font = '14px sans-serif';
                 ctx.textAlign = 'right';
@@ -343,10 +408,15 @@
                     ctx.fill();
                     ctx.globalAlpha = 1.0;
                     
+                    // Check if this series is hovered for highlighting
+                    const isHovered = hoveredSeries === target;
+                    const minMaxLineWidth = isHovered ? 2.5 : 1;
+                    const minMaxAlpha = isHovered ? 0.6 : 0.3;
+                    
                     // Draw min line (thin, lighter color)
                     ctx.strokeStyle = colors[idx];
-                    ctx.globalAlpha = 0.3 * alphaMultiplier;
-                    ctx.lineWidth = 1;
+                    ctx.globalAlpha = minMaxAlpha * alphaMultiplier;
+                    ctx.lineWidth = minMaxLineWidth;
                     ctx.setLineDash(dashPattern);
                     ctx.beginPath();
                     segment.forEach((window, i) => {
@@ -608,13 +678,17 @@
             
             // Hover to highlight (optional visual feedback)
             item.addEventListener('mouseenter', () => {
+                hoveredSeries = target;
                 if (seriesVisible[target]) {
                     item.style.fontWeight = 'bold';
                 }
+                drawChart();
             });
             
             item.addEventListener('mouseleave', () => {
+                hoveredSeries = null;
                 item.style.fontWeight = 'normal';
+                drawChart();
             });
             
             legendEl.appendChild(item);
@@ -671,7 +745,24 @@
                 drawChart();  // Redraw
             });
             
+            // Hover to highlight min/max lines
+            card.addEventListener('mouseenter', () => {
+                hoveredSeries = target;
+                drawChart();
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                hoveredSeries = null;
+                drawChart();
+            });
+            
             statsEl.appendChild(card);
+        });
+        
+        // Log scale toggle event listener
+        document.getElementById('logScaleToggle').addEventListener('change', (e) => {
+            useLogScale = e.target.checked;
+            drawChart();
         });
         
         // Initial draw
