@@ -719,6 +719,16 @@ bufferbane report --same-period --format html --output report.html
    - Trigger: Latency increases >200ms under load
    - Data: Idle vs loaded latency, load type
 
+9. **Time Sync Established**
+   - Trigger: Server time synchronization quality reaches ≥80% after collecting 8+ samples
+   - Data: Sync quality percentage, clock offset in ms, server name
+   - Note: Upload/download latency measurements are only reported when time sync is established
+
+10. **Time Sync Lost**
+    - Trigger: Server time synchronization quality drops below 80%
+    - Data: Sync quality percentage, server name
+    - Note: Upload/download latency measurements are suspended until sync is re-established
+
 ### Alert Actions
 
 - **Logging**: Write to events table with full details
