@@ -15,10 +15,52 @@ use protocol::{
         PacketHeader, PacketType,
     },
 };
+use std::collections::VecDeque;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, info, warn};
+
+/// Sample of clock offset measurement
+#[derive(Clone)]
+struct OffsetSample {
+    /// Measured offset (ns)
+    offset_ns: f64,
+    /// RTT for this sample (ns)
+    rtt_ns: f64,
+}
+
+/// Time synchronization state for a server
+struct TimeSyncState {
+    /// Monotonic reference point for this session
+    session_start: Instant,
+    /// System time at session start (for storage)
+    session_start_system: SystemTime,
+    /// Ring buffer of recent offset samples (last 16)
+    offset_samples: VecDeque<OffsetSample>,
+    /// Current best offset estimate (ns)
+    best_offset_ns: f64,
+    /// Sync quality score (0-100)
+    quality: u8,
+    /// Is time sync good enough for reporting?
+    is_synced: bool,
+    /// Was synced in previous measurement (for event detection)
+    was_synced: bool,
+}
+
+impl TimeSyncState {
+    fn new() -> Self {
+        Self {
+            session_start: Instant::now(),
+            session_start_system: SystemTime::now(),
+            offset_samples: VecDeque::new(),
+            best_offset_ns: 0.0,
+            quality: 0,
+            is_synced: false,
+            was_synced: false,
+        }
+    }
+}
 
 /// Server tester for Phase 2 features
 pub struct ServerTester {
@@ -31,12 +73,8 @@ pub struct ServerTester {
     interface: String,
     connection_type: String,
     sequence: u32,
-    /// Estimated clock offset (server_clock - client_clock) in nanoseconds
-    /// Calculated using: offset = ((T2-T1) + (T3-T4)) / 2
-    /// Updated with exponential moving average for stability
-    clock_offset_ns: f64,
-    /// Weight factor for EMA (0.1 = 10% new, 90% old)
-    offset_ema_alpha: f64,
+    /// Time synchronization state
+    time_sync: TimeSyncState,
 }
 
 impl ServerTester {
@@ -90,8 +128,7 @@ impl ServerTester {
             interface,
             connection_type,
             sequence: 0,
-            clock_offset_ns: 0.0,  // Will be calculated from measurements
-            offset_ema_alpha: 0.1,  // 10% new sample, 90% history
+            time_sync: TimeSyncState::new(),
         })
     }
     
@@ -103,6 +140,10 @@ impl ServerTester {
             match self.send_knock() {
                 Ok(session_id) => {
                     self.session_id = Some(session_id);
+                    
+                    // Reset time sync on new session
+                    self.time_sync = TimeSyncState::new();
+                    
                     info!("Authenticated with server {} (session_id: {})", self.server_addr, session_id);
                     return Ok(());
                 }
@@ -186,6 +227,86 @@ impl ServerTester {
         Ok(ack.session_id)
     }
     
+    /// Update time synchronization state with a new measurement
+    fn update_time_sync(&mut self, t1: u64, t2: u64, t3: u64, t4: u64, rtt_ns: f64) {
+        // Calculate raw offset using NTP algorithm
+        // offset = ((T2 - T1) + (T3 - T4)) / 2
+        let offset_ns = ((t2 as f64 - t1 as f64) + (t3 as f64 - t4 as f64)) / 2.0;
+        
+        // Validate by checking if this offset produces reasonable upload/download times
+        // They should both be positive and less than RTT
+        let test_upload = (t2 as f64 - t1 as f64) - offset_ns;
+        let test_download = (t4 as f64 - t3 as f64) + offset_ns;
+        
+        if test_upload <= 0.0 || test_download <= 0.0 || test_upload >= rtt_ns || test_download >= rtt_ns {
+            debug!(
+                "Rejecting offset sample for {}: offset={:.2}ms would produce invalid latencies (up={:.2}ms, down={:.2}ms, rtt={:.2}ms)",
+                self.config.host,
+                offset_ns / 1_000_000.0,
+                test_upload / 1_000_000.0,
+                test_download / 1_000_000.0,
+                rtt_ns / 1_000_000.0
+            );
+            return;
+        }
+        
+        // Add to ring buffer
+        self.time_sync.offset_samples.push_back(OffsetSample {
+            offset_ns,
+            rtt_ns,
+        });
+        
+        // Keep last 16 samples
+        if self.time_sync.offset_samples.len() > 16 {
+            self.time_sync.offset_samples.pop_front();
+        }
+        
+        // Need at least 8 samples for good sync
+        if self.time_sync.offset_samples.len() < 8 {
+            self.time_sync.is_synced = false;
+            self.time_sync.quality = (self.time_sync.offset_samples.len() * 12) as u8; // 0-96
+            return;
+        }
+        
+        // Use best quartile (lowest RTT = most reliable)
+        let mut sorted: Vec<_> = self.time_sync.offset_samples.iter().collect();
+        sorted.sort_by(|a, b| a.rtt_ns.partial_cmp(&b.rtt_ns).unwrap());
+        
+        let best_count = sorted.len() / 2; // Top 50%
+        let best_samples: Vec<_> = sorted.iter().take(best_count).collect();
+        
+        // Calculate median offset from best samples
+        let mut best_offsets: Vec<f64> = best_samples.iter().map(|s| s.offset_ns).collect();
+        best_offsets.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        self.time_sync.best_offset_ns = best_offsets[best_offsets.len() / 2];
+        
+        // Calculate standard deviation for quality
+        let mean = best_offsets.iter().sum::<f64>() / best_offsets.len() as f64;
+        let variance = best_offsets.iter()
+            .map(|x| (x - mean).powi(2))
+            .sum::<f64>() / best_offsets.len() as f64;
+        let std_dev_ms = (variance.sqrt()) / 1_000_000.0;
+        
+        // Quality score: 100 if std_dev < 1ms, decreasing to 0 at 10ms
+        self.time_sync.quality = ((1.0 - (std_dev_ms / 10.0).min(1.0)) * 100.0) as u8;
+        self.time_sync.is_synced = self.time_sync.quality >= 80;
+        
+        if !self.time_sync.is_synced {
+            debug!(
+                "Time sync quality low for {}: {}% (std_dev={:.2}ms, samples={})",
+                self.config.host, self.time_sync.quality, std_dev_ms, self.time_sync.offset_samples.len()
+            );
+        } else if self.sequence <= 10 || self.sequence % 100 == 0 {
+            debug!(
+                "Time sync for {}: offset={:.2}ms, quality={}%, samples={}",
+                self.config.host,
+                self.time_sync.best_offset_ns / 1_000_000.0,
+                self.time_sync.quality,
+                self.time_sync.offset_samples.len()
+            );
+        }
+    }
+    
     /// Run echo test (send ECHO_REQUEST, wait for ECHO_REPLY)
     pub fn run_test(&mut self) -> Result<Vec<Measurement>> {
         if !self.config.enable_echo_test {
@@ -216,8 +337,8 @@ impl ServerTester {
             self.connection_type.clone(),
         );
         
-        // Send echo request
-        let start_time = SystemTime::now();
+        // Use monotonic clock for RTT measurement
+        let start_instant = Instant::now();
         let echo_request = EchoRequestPayload::new(self.sequence);
         let request_timestamp = echo_request.client_timestamp;
         
@@ -237,128 +358,36 @@ impl ServerTester {
             }
         };
         
-        let end_time = SystemTime::now();
-        let client_recv_ns = end_time
+        let end_instant = Instant::now();
+        
+        // Calculate RTT using monotonic clock
+        let rtt = end_instant
+            .duration_since(start_instant)
+            .as_secs_f64()
+            * 1000.0; // Convert to milliseconds
+        let rtt_ns = rtt * 1_000_000.0;
+        
+        // Get client recv timestamp for offset calculation (still need SystemTime for protocol)
+        let client_recv_ns = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
         
-        let rtt = end_time
-            .duration_since(start_time)
-            .unwrap_or_default()
-            .as_secs_f64()
-            * 1000.0; // Convert to milliseconds
+        // Extract timestamps from reply
+        let t1 = reply.client_send_timestamp;
+        let t2 = reply.server_recv_timestamp;
+        let t3 = reply.server_send_timestamp;
+        let t4 = client_recv_ns;
         
-        // Calculate clock offset using NTP-style algorithm
-        // Given timestamps: T1 (client send), T2 (server recv), T3 (server send), T4 (client recv)
-        // Clock offset θ (server - client) = ((T2 - T1) + (T3 - T4)) / 2
-        // This works because:
-        //   T2 - T1 = upload_time + θ
-        //   T4 - T3 = download_time - θ
-        //   Adding: (T2-T1) + (T3-T4) = upload_time - download_time + 2θ
-        //   If path is symmetric (upload ≈ download): 2θ ≈ (T2-T1) + (T3-T4)
+        // Update time sync with this measurement
+        self.update_time_sync(t1, t2, t3, t4, rtt_ns);
         
-        let t1 = reply.client_send_timestamp as f64;
-        let t2 = reply.server_recv_timestamp as f64;
-        let t3 = reply.server_send_timestamp as f64;
-        let t4 = client_recv_ns as f64;
+        // Calculate measurement timestamp from session start + elapsed monotonic time
+        let measurement_time = self.time_sync.session_start_system 
+            + end_instant.duration_since(self.time_sync.session_start);
         
-        // Calculate raw offset for this measurement
-        let measured_offset_ns = ((t2 - t1) + (t3 - t4)) / 2.0;
-        
-        // Validate the measured offset to detect anomalies
-        // If offset would make upload or download negative or greater than RTT, it's likely wrong
-        let test_upload = (t2 - t1) - measured_offset_ns;
-        let test_download = (t4 - t3) + measured_offset_ns;
-        let rtt_ns = rtt * 1_000_000.0;
-        
-        // Check if this measurement produces reasonable values
-        let offset_is_valid = test_upload > 0.0 
-            && test_download > 0.0 
-            && test_upload < rtt_ns 
-            && test_download < rtt_ns;
-        
-        // Update moving average (Exponential Moving Average)
-        if self.sequence == 1 {
-            // First measurement - use it only if valid, otherwise use 0
-            if offset_is_valid {
-                self.clock_offset_ns = measured_offset_ns;
-            } else {
-                self.clock_offset_ns = 0.0;
-                debug!(
-                    "First offset measurement rejected for {} (would produce invalid latencies), using 0",
-                    self.config.host
-                );
-            }
-        } else {
-            // Detect large offset changes (> 50ms) which indicate problems
-            let offset_change_ns = (measured_offset_ns - self.clock_offset_ns).abs();
-            let offset_change_ms = offset_change_ns / 1_000_000.0;
-            
-            if !offset_is_valid {
-                // Skip this measurement if it would produce invalid results
-                debug!(
-                    "Offset measurement rejected for {} (invalid latencies: up={:.2}ms, down={:.2}ms)",
-                    self.config.host, test_upload / 1_000_000.0, test_download / 1_000_000.0
-                );
-                // Don't update offset, use previous value
-            } else if offset_change_ms > 50.0 {
-                // Large offset change detected - might be clock adjustment or bad packet
-                // Use faster adaptation (higher alpha) to recover
-                warn!(
-                    "Large offset change detected for {}: {:.2}ms -> {:.2}ms (change: {:.2}ms)",
-                    self.config.host,
-                    self.clock_offset_ns / 1_000_000.0,
-                    measured_offset_ns / 1_000_000.0,
-                    offset_change_ms
-                );
-                // Use 50% weight for fast recovery
-                self.clock_offset_ns = 0.5 * measured_offset_ns + 0.5 * self.clock_offset_ns;
-            } else {
-                // Normal case: smooth with EMA
-                self.clock_offset_ns = self.offset_ema_alpha * measured_offset_ns 
-                                        + (1.0 - self.offset_ema_alpha) * self.clock_offset_ns;
-            }
-        }
-        
-        // Apply offset correction to get true one-way latencies
-        let upload_latency_ns = (t2 - t1) - self.clock_offset_ns;
-        let download_latency_ns = (t4 - t3) + self.clock_offset_ns;
-        let upload_latency_ms = upload_latency_ns / 1_000_000.0;
-        let download_latency_ms = download_latency_ns / 1_000_000.0;
-        
-        // Server processing time (uses only server clock, no offset needed)
-        let server_processing_ns = t3 - t2;
-        let server_processing_us = (server_processing_ns / 1_000.0) as i64;
-        let server_processing_ms = server_processing_us as f64 / 1000.0;
-        
-        // Sanity check: corrected times should sum to RTT
-        let calculated_rtt = upload_latency_ms + download_latency_ms + server_processing_ms;
-        let rtt_diff = (rtt - calculated_rtt).abs();
-        
-        // If offset correction worked, difference should be < 5ms
-        // If not, something is wrong (e.g., asymmetric path, packet reordering)
-        let correction_valid = rtt_diff < 5.0;
-        
-        if !correction_valid {
-            debug!(
-                "Offset correction validation failed for {}: RTT={:.2}ms but corrected_sum={:.2}ms (diff={:.2}ms, offset={:.2}ms)",
-                self.config.host, rtt, calculated_rtt, rtt_diff, self.clock_offset_ns / 1_000_000.0
-            );
-        }
-        
-        // Log offset for first few measurements and periodically
-        if self.sequence <= 5 || self.sequence % 100 == 0 {
-            debug!(
-                "Clock offset for {}: {:.2}ms (measured: {:.2}ms, EMA smoothed)",
-                self.config.host,
-                self.clock_offset_ns / 1_000_000.0,
-                measured_offset_ns / 1_000_000.0
-            );
-        }
-        
-        // Update measurement with success data
-        measurement.timestamp = start_time
+        // Update measurement with base data
+        measurement.timestamp = measurement_time
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
@@ -367,15 +396,64 @@ impl ServerTester {
         measurement.rtt_ms = Some(rtt);
         measurement.packet_loss_pct = Some(0.0); // Successful = 0% loss
         measurement.status = "success".to_string();
-        measurement.upload_latency_ms = Some(upload_latency_ms);
-        measurement.download_latency_ms = Some(download_latency_ms);
-        measurement.server_processing_us = Some(server_processing_us);
         
-        debug!(
-            "Server ECHO test completed: target={}, rtt={:.2}ms, upload={:.2}ms, download={:.2}ms, processing={}μs, offset={:.2}ms, seq={}",
-            self.config.host, rtt, upload_latency_ms, download_latency_ms, server_processing_us,
-            self.clock_offset_ns / 1_000_000.0, self.sequence
-        );
+        // Track previous sync state for event detection
+        let prev_synced = self.time_sync.was_synced;
+        
+        // Only include timing data if synced
+        if self.time_sync.is_synced {
+            let upload_latency_ns = (t2 as f64 - t1 as f64) - self.time_sync.best_offset_ns;
+            let download_latency_ns = (t4 as f64 - t3 as f64) + self.time_sync.best_offset_ns;
+            let server_processing_ns = t3 as f64 - t2 as f64;
+            
+            measurement.upload_latency_ms = Some(upload_latency_ns / 1_000_000.0);
+            measurement.download_latency_ms = Some(download_latency_ns / 1_000_000.0);
+            measurement.server_processing_us = Some((server_processing_ns / 1_000.0) as i64);
+            
+            debug!(
+                "Server {} -> rtt={:.2}ms, upload={:.2}ms, download={:.2}ms, processing={:.0}μs, sync_quality={}%",
+                self.config.host,
+                rtt,
+                upload_latency_ns / 1_000_000.0,
+                download_latency_ns / 1_000_000.0,
+                server_processing_ns / 1_000.0,
+                self.time_sync.quality
+            );
+        } else {
+            // Not synced - only store RTT
+            measurement.upload_latency_ms = None;
+            measurement.download_latency_ms = None;
+            measurement.server_processing_us = None;
+            
+            if self.sequence % 10 == 0 {
+                debug!(
+                    "Server {} -> rtt={:.2}ms, time sync not ready ({}/8 samples, quality={}%)",
+                    self.config.host,
+                    rtt,
+                    self.time_sync.offset_samples.len(),
+                    self.time_sync.quality
+                );
+            }
+        }
+        
+        // Update sync state tracking
+        self.time_sync.was_synced = self.time_sync.is_synced;
+        
+        // Detect sync state changes
+        if !prev_synced && self.time_sync.is_synced {
+            info!(
+                "Time sync established for {} (quality={}%, offset={:.2}ms)",
+                self.config.host,
+                self.time_sync.quality,
+                self.time_sync.best_offset_ns / 1_000_000.0
+            );
+        } else if prev_synced && !self.time_sync.is_synced {
+            warn!(
+                "Time sync lost for {} (quality dropped to {}%)",
+                self.config.host,
+                self.time_sync.quality
+            );
+        }
         
         Ok(vec![measurement])
     }
