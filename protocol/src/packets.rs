@@ -246,12 +246,17 @@ pub struct EchoRequestPayload {
 }
 
 impl EchoRequestPayload {
+    /// Create new echo request with monotonic timestamp
+    /// The timestamp is nanoseconds and should be from Instant (not SystemTime)
     pub fn new(sequence: u32) -> Self {
-        let client_timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        Self { sequence, client_timestamp }
+        // Caller should provide monotonic timestamp
+        // This is a placeholder - should be set by caller
+        Self { sequence, client_timestamp: 0 }
+    }
+    
+    /// Create with explicit timestamp (from monotonic clock)
+    pub fn with_timestamp(sequence: u32, timestamp_ns: u64) -> Self {
+        Self { sequence, client_timestamp: timestamp_ns }
     }
     
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -288,22 +293,35 @@ pub struct EchoReplyPayload {
 }
 
 impl EchoReplyPayload {
+    /// Create reply with monotonic timestamp for T2 (server recv)
+    /// Timestamp should be nanoseconds from server's monotonic clock (Instant)
     pub fn new(request: &EchoRequestPayload) -> Self {
-        let server_recv_timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        
-        // Server_send_timestamp will be set just before sending
+        // Placeholder - caller should use with_timestamps instead
         Self {
             sequence: request.sequence,
             client_send_timestamp: request.client_timestamp,
-            server_recv_timestamp,
-            server_send_timestamp: server_recv_timestamp, // Will be updated before send
+            server_recv_timestamp: 0,
+            server_send_timestamp: 0,
         }
     }
     
-    /// Update server send timestamp to current time
+    /// Create reply with explicit monotonic timestamps
+    pub fn with_timestamps(request: &EchoRequestPayload, recv_ns: u64, send_ns: u64) -> Self {
+        Self {
+            sequence: request.sequence,
+            client_send_timestamp: request.client_timestamp,
+            server_recv_timestamp: recv_ns,
+            server_send_timestamp: send_ns,
+        }
+    }
+    
+    /// Update server send timestamp (monotonic)
+    pub fn set_send_timestamp_monotonic(&mut self, send_ns: u64) {
+        self.server_send_timestamp = send_ns;
+    }
+    
+    /// Update server send timestamp to current time (DEPRECATED - use monotonic)
+    #[deprecated(note = "Use monotonic clock instead of SystemTime")]
     pub fn set_send_timestamp(&mut self) {
         self.server_send_timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -484,4 +502,5 @@ impl ThroughputStatsPayload {
         })
     }
 }
+
 

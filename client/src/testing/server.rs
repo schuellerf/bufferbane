@@ -337,10 +337,15 @@ impl ServerTester {
             self.connection_type.clone(),
         );
         
-        // Use monotonic clock for RTT measurement
+        // Use monotonic clock for ALL timing (T1, T4, and RTT)
         let start_instant = Instant::now();
-        let echo_request = EchoRequestPayload::new(self.sequence);
-        let request_timestamp = echo_request.client_timestamp;
+        
+        // T1: Client send time (monotonic nanoseconds since session start)
+        let t1_ns = start_instant
+            .duration_since(self.time_sync.session_start)
+            .as_nanos() as u64;
+        
+        let echo_request = EchoRequestPayload::with_timestamp(self.sequence, t1_ns);
         
         let reply = match self.send_echo_request(&echo_request) {
             Ok(r) => r,
@@ -367,17 +372,16 @@ impl ServerTester {
             * 1000.0; // Convert to milliseconds
         let rtt_ns = rtt * 1_000_000.0;
         
-        // Get client recv timestamp for offset calculation (still need SystemTime for protocol)
-        let client_recv_ns = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+        // T4: Client recv time (monotonic nanoseconds since session start)
+        let t4_ns = end_instant
+            .duration_since(self.time_sync.session_start)
             .as_nanos() as u64;
         
-        // Extract timestamps from reply
-        let t1 = reply.client_send_timestamp;
-        let t2 = reply.server_recv_timestamp;
-        let t3 = reply.server_send_timestamp;
-        let t4 = client_recv_ns;
+        // Extract timestamps from reply (T2 and T3 are from server's monotonic clock)
+        let t1 = reply.client_send_timestamp;  // Our T1, echoed back
+        let t2 = reply.server_recv_timestamp;  // Server's monotonic time
+        let t3 = reply.server_send_timestamp;  // Server's monotonic time
+        let t4 = t4_ns;  // Our T4 (monotonic)
         
         // Update time sync with this measurement
         self.update_time_sync(t1, t2, t3, t4, rtt_ns);
@@ -391,7 +395,7 @@ impl ServerTester {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        measurement.monotonic_ns = request_timestamp as u128;
+        measurement.monotonic_ns = t1_ns as u128;  // Store monotonic timestamp for reference
         measurement.server_name = Some(self.config.host.clone());
         measurement.rtt_ms = Some(rtt);
         measurement.packet_loss_pct = Some(0.0); // Successful = 0% loss

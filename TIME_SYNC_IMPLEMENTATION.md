@@ -9,9 +9,9 @@ Bufferbane uses a multi-packet NTP-style time synchronization system to provide 
 - **Multi-packet windowing**: Collects 8-16 samples before reporting latencies
 - **Outlier filtering**: Uses median of best quartile (lowest RTT packets)
 - **Quality scoring**: 0-100% confidence score based on measurement consistency
-- **Monotonic timing**: Uses `Instant` for RTT measurements (immune to NTP adjustments)
+- **Fully monotonic timing**: All timestamps (T1, T2, T3, T4) use `Instant` (immune to NTP adjustments)
 - **Graceful degradation**: Always reports RTT; upload/download only when sync quality ≥ 80%
-- **Zero negative values**: Robust validation prevents invalid latency calculations
+- **Double validation**: Sample validation + final latency validation prevents all invalid values
 
 ## Implementation Details
 
@@ -36,9 +36,25 @@ struct TimeSyncState {
 }
 ```
 
-### 2. Monotonic Timing
+### 2. Fully Monotonic Timing (Critical for Accuracy)
 
-Uses `Instant::now()` instead of `SystemTime::now()` for all RTT measurements to avoid clock jumps during system NTP adjustments.
+**All timestamps use monotonic clocks** to prevent NTP clock jumps from corrupting measurements:
+
+**Client (T1 and T4):**
+- T1: `Instant::now()` since session start → monotonic nanoseconds
+- T4: `Instant::now()` since session start → monotonic nanoseconds
+- Each session has a fixed `session_start: Instant` reference point
+
+**Server (T2 and T3):**
+- T2: `Instant::now()` since server start → monotonic nanoseconds
+- T3: `Instant::now()` since server start → monotonic nanoseconds
+- Server has a static `SERVER_START: Instant` reference point
+
+**Why This Matters:**
+If `SystemTime` were used, NTP clock adjustments (e.g., +1074ms jump) during a measurement window would corrupt the offset calculation, leading to negative or wildly incorrect upload/download values. With monotonic clocks, the offset calculation is **completely immune** to system clock changes.
+
+**Storage:**
+`SystemTime` is only used for database storage timestamps, converted from the monotonic measurement time for human readability in charts.
 
 ### 3. Multi-Packet Offset Calculation
 

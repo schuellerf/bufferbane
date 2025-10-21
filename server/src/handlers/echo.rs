@@ -9,7 +9,18 @@ use protocol::{
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::debug;
+
+// Lazy static for server start time (monotonic reference)
+use std::sync::OnceLock;
+static SERVER_START: OnceLock<Instant> = OnceLock::new();
+
+/// Get nanoseconds since server start (monotonic)
+fn monotonic_ns() -> u64 {
+    let start = SERVER_START.get_or_init(|| Instant::now());
+    Instant::now().duration_since(*start).as_nanos() as u64
+}
 
 /// Handle ECHO_REQUEST packet
 ///
@@ -40,11 +51,17 @@ pub async fn handle_echo_request(
     // Update session stats
     session_manager.update_last_seen(header.client_id).await;
     
-    // Create echo reply
-    let mut reply = EchoReplyPayload::new(&request);
+    // T2: Server receive time (monotonic, nanoseconds since server start)
+    let t2_ns = monotonic_ns();
     
-    // Set send timestamp just before sending (most accurate)
-    reply.set_send_timestamp();
+    // Create echo reply with T2 and T3 (T3 will be set just before sending)
+    let mut reply = EchoReplyPayload::new(&request);
+    reply.server_recv_timestamp = t2_ns;
+    
+    // T3: Server send timestamp (monotonic, set just before encrypting)
+    let t3_ns = monotonic_ns();
+    reply.server_send_timestamp = t3_ns;
+    
     let reply_bytes = reply.to_bytes();
     
     // Build response packet
