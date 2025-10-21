@@ -27,7 +27,7 @@ pub fn detect_default_gateway() -> Result<IpAddr> {
             if let Some(via_idx) = parts.iter().position(|&p| p == "via") {
                 if let Some(&gateway_str) = parts.get(via_idx + 1) {
                     if let Ok(gateway) = IpAddr::from_str(gateway_str) {
-                        info!("Detected default gateway: {}", gateway);
+                        debug!("Detected default gateway: {}", gateway);
                         return Ok(gateway);
                     }
                 }
