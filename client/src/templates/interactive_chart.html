@@ -178,17 +178,40 @@
         }
         
         .color-picker-container h3 {
-            margin: 0 0 10px 0;
-            font-size: 14px;
+            margin: 0 0 15px 0;
+            font-size: 15px;
             color: #333;
         }
         
         .color-picker-container input[type="color"] {
-            width: 150px;
-            height: 40px;
-            border: none;
+            width: 100%;
+            height: 60px;
+            border: 2px solid #ddd;
             border-radius: 4px;
             cursor: pointer;
+        }
+        
+        .color-picker-container label {
+            display: block;
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .color-picker-container select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            background: white;
+            margin-bottom: 15px;
+        }
+        
+        .style-group {
+            margin-bottom: 15px;
         }
         
         .color-picker-buttons {
@@ -377,8 +400,20 @@
 
     <div class="color-picker-overlay" id="colorPickerOverlay"></div>
     <div class="color-picker-container" id="colorPickerContainer">
-        <h3 id="colorPickerTitle">Choose Color</h3>
-        <input type="color" id="colorPickerInput" />
+        <h3 id="colorPickerTitle">Choose Style</h3>
+        <div class="style-group">
+            <label for="colorPickerInput">Color</label>
+            <input type="color" id="colorPickerInput" />
+        </div>
+        <div class="style-group">
+            <label for="lineStyleSelect">Line Style</label>
+            <select id="lineStyleSelect">
+                <option value="solid">Solid</option>
+                <option value="dashed">Dashed</option>
+                <option value="dotted">Dotted</option>
+                <option value="dash-dot">Dash-Dot</option>
+            </select>
+        </div>
         <div class="color-picker-buttons">
             <button class="secondary" id="colorPickerCancel">Cancel</button>
             <button class="primary" id="colorPickerApply">Apply</button>
@@ -411,6 +446,7 @@
             currentMinRtt: minRtt,
             currentMaxRtt: maxRtt,
             customColors: {},
+            customLineStyles: {},
             colorPickerTarget: null
         };
         
@@ -607,25 +643,31 @@
             // Get color (custom or default)
             const seriesColor = state.customColors[target] || colors[colorIndex];
             
-            // Determine line style
-            let lineWidth = 2;
+            // Get line style (custom or default solid)
+            const lineStyle = state.customLineStyles[target] || 'solid';
             let dashPattern = [];
+            switch (lineStyle) {
+                case 'dashed':
+                    dashPattern = [10, 5];
+                    break;
+                case 'dotted':
+                    dashPattern = [2, 3];
+                    break;
+                case 'dash-dot':
+                    dashPattern = [10, 5, 2, 5];
+                    break;
+                default: // solid
+                    dashPattern = [];
+            }
+            
+            // Determine line width
+            let lineWidth = 2;
             let alphaMultiplier = 1.0;
             
-            if (target.includes('↑ Upload')) {
-                dashPattern = [8, 4];
-                lineWidth = 2;
-                alphaMultiplier = 0.8;
-            } else if (target.includes('↓ Download')) {
-                dashPattern = [2, 3];
-                lineWidth = 2;
-                alphaMultiplier = 0.9;
-            } else if (target.includes('RTT')) {
-                dashPattern = [];
+            if (target.includes('RTT')) {
                 lineWidth = 3;
                 alphaMultiplier = 1.0;
             } else {
-                dashPattern = [];
                 lineWidth = 2;
                 alphaMultiplier = 1.0;
             }
@@ -944,25 +986,31 @@
             const overlay = document.getElementById('colorPickerOverlay');
             const container = document.getElementById('colorPickerContainer');
             const input = document.getElementById('colorPickerInput');
+            const lineStyleSelect = document.getElementById('lineStyleSelect');
             const title = document.getElementById('colorPickerTitle');
             
             // Get current color (custom or default)
             const currentColor = state.customColors[target] || colors[colorIndex];
             input.value = currentColor;
             
-            title.textContent = `Choose Color for ${target}`;
+            // Get current line style (custom or default solid)
+            const currentLineStyle = state.customLineStyles[target] || 'solid';
+            lineStyleSelect.value = currentLineStyle;
+            
+            title.textContent = `Choose Style for ${target}`;
             
             // Position near the clicked element
             const rect = event.target.getBoundingClientRect();
-            container.style.left = Math.min(rect.left, window.innerWidth - 250) + 'px';
-            container.style.top = Math.min(rect.bottom + 10, window.innerHeight - 200) + 'px';
+            container.style.left = Math.min(rect.left, window.innerWidth - 300) + 'px';
+            container.style.top = Math.min(rect.bottom + 10, window.innerHeight - 250) + 'px';
             
             overlay.style.display = 'block';
             container.style.display = 'block';
         }
         
-        function updateSeriesColor(target, newColor) {
+        function updateSeriesStyle(target, newColor, newLineStyle) {
             state.customColors[target] = newColor;
+            state.customLineStyles[target] = newLineStyle;
             
             // Update legend color bar
             const legendItem = document.querySelector(`.legend-item[data-target="${target}"]`);
@@ -1091,8 +1139,9 @@
         // Color picker event listeners
         document.getElementById('colorPickerApply').addEventListener('click', () => {
             const input = document.getElementById('colorPickerInput');
+            const lineStyleSelect = document.getElementById('lineStyleSelect');
             if (state.colorPickerTarget) {
-                updateSeriesColor(state.colorPickerTarget, input.value);
+                updateSeriesStyle(state.colorPickerTarget, input.value, lineStyleSelect.value);
             }
             closeColorPicker();
         });
