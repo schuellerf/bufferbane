@@ -448,6 +448,27 @@ async fn run_monitoring(config: &config::Config, quiet: bool, verbose: bool) -> 
                 if let Err(e) = db.store_measurement(measurement) {
                     error!("Failed to store measurement: {}", e);
                 }
+                
+                // Store sync events if present
+                if let Some(ref sync_event) = measurement.sync_event {
+                    let severity = match sync_event.event_type.as_str() {
+                        "sync_established" => "info",
+                        "sync_lost" => "warning",
+                        "sync_invalid" => "error",
+                        _ => "info",
+                    };
+                    
+                    if let Err(e) = db.store_event(
+                        &sync_event.event_type,
+                        &measurement.target,
+                        severity,
+                        &sync_event.message,
+                        sync_event.quality.map(|q| q as f64),
+                        None,
+                    ) {
+                        error!("Failed to store sync event: {}", e);
+                    }
+                }
             }
             
             // Check for alerts

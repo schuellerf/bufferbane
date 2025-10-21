@@ -54,6 +54,16 @@ pub struct Measurement {
     
     /// Server processing time in microseconds (for server tests only)
     pub server_processing_us: Option<i64>,
+    
+    /// Sync event information (if a sync state change occurred)
+    pub sync_event: Option<SyncEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncEvent {
+    pub event_type: String,  // "sync_established", "sync_lost", "sync_invalid"
+    pub message: String,
+    pub quality: Option<u8>,
 }
 
 impl Measurement {
@@ -89,6 +99,7 @@ impl Measurement {
             upload_latency_ms: None,
             download_latency_ms: None,
             server_processing_us: None,
+            sync_event: None,
         }
     }
     
@@ -124,6 +135,7 @@ impl Measurement {
             upload_latency_ms: None,
             download_latency_ms: None,
             server_processing_us: None,
+            sync_event: None,
         }
     }
     

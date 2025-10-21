@@ -221,6 +221,7 @@ impl Database {
                 upload_latency_ms: row.get(14)?,
                 download_latency_ms: row.get(15)?,
                 server_processing_us: row.get(16)?,
+                sync_event: None,  // Events are not persisted to database, only logged
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

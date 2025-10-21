@@ -6,7 +6,7 @@
 //! - Future: Throughput and bufferbloat testing
 
 use crate::config::ServerConfig;
-use crate::testing::Measurement;
+use crate::testing::{Measurement, SyncEvent};
 use anyhow::{Context, Result};
 use protocol::{
     crypto,
@@ -406,19 +406,50 @@ impl ServerTester {
             let download_latency_ns = (t4 as f64 - t3 as f64) + self.time_sync.best_offset_ns;
             let server_processing_ns = t3 as f64 - t2 as f64;
             
-            measurement.upload_latency_ms = Some(upload_latency_ns / 1_000_000.0);
-            measurement.download_latency_ms = Some(download_latency_ns / 1_000_000.0);
-            measurement.server_processing_us = Some((server_processing_ns / 1_000.0) as i64);
+            // Final validation: ensure calculated values are reasonable
+            // Both should be positive and less than RTT
+            let values_valid = upload_latency_ns > 0.0 
+                && download_latency_ns > 0.0 
+                && upload_latency_ns < rtt_ns 
+                && download_latency_ns < rtt_ns;
             
-            debug!(
-                "Server {} -> rtt={:.2}ms, upload={:.2}ms, download={:.2}ms, processing={:.0}μs, sync_quality={}%",
-                self.config.host,
-                rtt,
-                upload_latency_ns / 1_000_000.0,
-                download_latency_ns / 1_000_000.0,
-                server_processing_ns / 1_000.0,
-                self.time_sync.quality
-            );
+            if values_valid {
+                measurement.upload_latency_ms = Some(upload_latency_ns / 1_000_000.0);
+                measurement.download_latency_ms = Some(download_latency_ns / 1_000_000.0);
+                measurement.server_processing_us = Some((server_processing_ns / 1_000.0) as i64);
+                
+                debug!(
+                    "Server {} -> rtt={:.2}ms, upload={:.2}ms, download={:.2}ms, processing={:.0}μs, sync_quality={}%",
+                    self.config.host,
+                    rtt,
+                    upload_latency_ns / 1_000_000.0,
+                    download_latency_ns / 1_000_000.0,
+                    server_processing_ns / 1_000.0,
+                    self.time_sync.quality
+                );
+            } else {
+                // Calculated values invalid - mark sync as lost and don't store them
+                let message = format!(
+                    "Invalid latencies detected: up={:.2}ms, down={:.2}ms (RTT={:.2}ms) - offset corrupted",
+                    upload_latency_ns / 1_000_000.0,
+                    download_latency_ns / 1_000_000.0,
+                    rtt
+                );
+                warn!("Time sync for {} {}", self.config.host, message);
+                
+                self.time_sync.is_synced = false;
+                self.time_sync.quality = 0;
+                measurement.upload_latency_ms = None;
+                measurement.download_latency_ms = None;
+                measurement.server_processing_us = None;
+                
+                // Store sync event
+                measurement.sync_event = Some(SyncEvent {
+                    event_type: "sync_invalid".to_string(),
+                    message,
+                    quality: Some(0),
+                });
+            }
         } else {
             // Not synced - only store RTT
             measurement.upload_latency_ms = None;
@@ -441,18 +472,27 @@ impl ServerTester {
         
         // Detect sync state changes
         if !prev_synced && self.time_sync.is_synced {
-            info!(
-                "Time sync established for {} (quality={}%, offset={:.2}ms)",
-                self.config.host,
+            let message = format!(
+                "Time sync established (quality={}%, offset={:.2}ms)",
                 self.time_sync.quality,
                 self.time_sync.best_offset_ns / 1_000_000.0
             );
+            info!("Time sync for {} {}", self.config.host, message);
+            
+            measurement.sync_event = Some(SyncEvent {
+                event_type: "sync_established".to_string(),
+                message,
+                quality: Some(self.time_sync.quality),
+            });
         } else if prev_synced && !self.time_sync.is_synced {
-            warn!(
-                "Time sync lost for {} (quality dropped to {}%)",
-                self.config.host,
-                self.time_sync.quality
-            );
+            let message = format!("Time sync lost (quality dropped to {}%)", self.time_sync.quality);
+            warn!("Time sync for {} {}", self.config.host, message);
+            
+            measurement.sync_event = Some(SyncEvent {
+                event_type: "sync_lost".to_string(),
+                message,
+                quality: Some(self.time_sync.quality),
+            });
         }
         
         Ok(vec![measurement])
