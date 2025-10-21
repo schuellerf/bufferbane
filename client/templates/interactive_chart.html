@@ -169,12 +169,18 @@
         
         .color-picker-container {
             position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             z-index: 1000;
             display: none;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow-y: auto;
         }
         
         .color-picker-container h3 {
@@ -999,11 +1005,7 @@
             
             title.textContent = `Choose Style for ${target}`;
             
-            // Position near the clicked element
-            const rect = event.target.getBoundingClientRect();
-            container.style.left = Math.min(rect.left, window.innerWidth - 300) + 'px';
-            container.style.top = Math.min(rect.bottom + 10, window.innerHeight - 250) + 'px';
-            
+            // Show modal (centered via CSS)
             overlay.style.display = 'block';
             container.style.display = 'block';
         }
