@@ -2,87 +2,237 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Bufferbane - Latency Chart</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            margin: 20px;
+            margin: 0;
+            padding: 10px;
             background: #f5f5f5;
         }
+        
         .container {
             max-width: 1400px;
             margin: 0 auto;
             background: white;
-            padding: 30px;
+            padding: 15px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        
         h1 {
-            margin-top: 0;
+            margin: 0 0 10px 0;
             color: #333;
-            font-size: 28px;
+            font-size: clamp(20px, 5vw, 28px);
         }
-        .chart-container {
+        
+        .period-info {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .event-legend {
+            margin: 15px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .event-legend strong {
+            margin-right: 10px;
+        }
+        
+        .event-legend span {
+            margin: 0 10px;
+            white-space: nowrap;
+        }
+        
+        .chart-wrapper {
             position: relative;
+            width: 100%;
+            overflow-x: auto;
             margin: 20px 0;
         }
+        
+        .chart-container {
+            position: relative;
+            min-width: 600px;
+        }
+        
         canvas {
             border: 1px solid #ddd;
             cursor: crosshair;
+            display: block;
+            width: 100%;
+            height: auto;
         }
+        
         #tooltip {
-            position: absolute;
+            position: fixed;
             background: rgba(0, 0, 0, 0.9);
             color: white;
             padding: 12px 16px;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 13px;
             pointer-events: none;
             display: none;
             z-index: 1000;
             white-space: nowrap;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            max-width: 90vw;
         }
+        
+        .controls {
+            margin: 15px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .controls label {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
         .legend {
             display: flex;
-            gap: 20px;
+            gap: 15px;
             margin-top: 20px;
             flex-wrap: wrap;
         }
+        
         .legend-item {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 16px;
-            padding: 8px;
-            margin: 2px 0;
+            font-size: 14px;
+            padding: 8px 12px;
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.2s, opacity 0.2s;
             user-select: none;
+            background: #f8f9fa;
         }
+        
         .legend-item:hover {
-            background-color: #f0f0f0;
+            background-color: #e8e9ea;
         }
+        
         .legend-item.disabled {
             opacity: 0.4;
             text-decoration: line-through;
         }
+        
         .legend-item.disabled:hover {
             opacity: 0.6;
         }
+        
         .legend-color {
             width: 24px;
             height: 4px;
             border-radius: 2px;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid rgba(0,0,0,0.2);
         }
+        
+        .legend-color:hover {
+            transform: scale(1.2);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        
+        .color-picker-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 999;
+            display: none;
+        }
+        
+        .color-picker-container {
+            position: fixed;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        
+        .color-picker-container h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .color-picker-container input[type="color"] {
+            width: 150px;
+            height: 40px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .color-picker-buttons {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .color-picker-buttons button {
+            flex: 1;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        
+        .color-picker-buttons button.primary {
+            background: #3366CC;
+            color: white;
+        }
+        
+        .color-picker-buttons button.primary:hover {
+            background: #2952A3;
+        }
+        
+        .color-picker-buttons button.secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .color-picker-buttons button.secondary:hover {
+            background: #d0d0d0;
+        }
+        
         .stats {
             margin-top: 20px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
             gap: 15px;
         }
+        
         .stat-card {
             padding: 15px;
             background: #f8f9fa;
@@ -92,118 +242,265 @@
             transition: background-color 0.2s, opacity 0.2s, transform 0.2s;
             user-select: none;
         }
+        
         .stat-card:hover {
             background: #e8e9ea;
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
+        
         .stat-card.disabled {
             opacity: 0.4;
             background: #f0f0f0;
         }
+        
         .stat-card.disabled:hover {
             opacity: 0.6;
             transform: none;
         }
+        
         .stat-card.disabled .stat-label {
             text-decoration: line-through;
         }
+        
         .stat-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #666;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            word-break: break-word;
         }
+        
         .stat-value {
-            font-size: 24px;
+            font-size: clamp(18px, 4vw, 24px);
             font-weight: 600;
             color: #333;
             margin-top: 5px;
+        }
+        
+        .stat-details {
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+            line-height: 1.4;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+            
+            .container {
+                padding: 10px;
+                border-radius: 4px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            .period-info {
+                font-size: 12px;
+            }
+            
+            .event-legend {
+                font-size: 12px;
+                padding: 8px;
+            }
+            
+            .event-legend span {
+                display: block;
+                margin: 4px 0;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .legend {
+                gap: 8px;
+            }
+            
+            .legend-item {
+                font-size: 13px;
+                padding: 6px 10px;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            #tooltip {
+                font-size: 12px;
+                padding: 10px 12px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Bufferbane - Latency Over Time</h1>
-        <p><strong>Period:</strong> {{START_TIME}} to {{END_TIME}}</p>
+        <p class="period-info"><strong>Period:</strong> {{START_TIME}} to {{END_TIME}}</p>
         
-        <div class="legend" style="margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 4px;">
-            <strong>Event Types:</strong>
-            <span style="margin-left: 20px;">
-                <span style="color: #FFA500; font-weight: bold;">▼</span> High Latency
-            </span>
-            <span style="margin-left: 20px;">
-                <span style="color: #FF0000; font-weight: bold;">▼</span> Packet Loss
-            </span>
-            <span style="margin-left: 20px;">
-                <span style="color: #8B0000; font-weight: bold;">▼</span> Error
-            </span>
+        <div class="chart-wrapper">
+            <div class="chart-container" id="chartContainer">
+                <canvas id="chart"></canvas>
+                <div id="tooltip"></div>
+            </div>
         </div>
         
-        <div class="chart-container">
-            <canvas id="chart" width="1200" height="600"></canvas>
-            <div id="tooltip"></div>
-        </div>
-        
-        <div style="margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 4px; display: flex; gap: 30px; align-items: center;">
-            <label style="cursor: pointer; user-select: none;">
-                <input type="checkbox" id="logScaleToggle" style="margin-right: 8px;">
+        <div class="controls">
+            <label>
+                <input type="checkbox" id="logScaleToggle">
                 Logarithmic Y-axis
             </label>
-            <label style="cursor: pointer; user-select: none;">
-                <input type="checkbox" id="showEventsToggle" style="margin-right: 8px;" checked>
+            <label>
+                <input type="checkbox" id="showEventsToggle" checked>
                 Show Events
             </label>
         </div>
         
         <div class="legend" id="legend"></div>
-        
         <div class="stats" id="stats"></div>
+        
+        <div class="event-legend">
+            <strong>Event Types:</strong>
+            <span><span style="color: #FFA500; font-weight: bold;">▼</span> High Latency</span>
+            <span><span style="color: #FF0000; font-weight: bold;">▼</span> Packet Loss</span>
+            <span><span style="color: #8B0000; font-weight: bold;">▼</span> Error</span>
+        </div>
+    </div>
+
+    <div class="color-picker-overlay" id="colorPickerOverlay"></div>
+    <div class="color-picker-container" id="colorPickerContainer">
+        <h3 id="colorPickerTitle">Choose Color</h3>
+        <input type="color" id="colorPickerInput" />
+        <div class="color-picker-buttons">
+            <button class="secondary" id="colorPickerCancel">Cancel</button>
+            <button class="primary" id="colorPickerApply">Apply</button>
+        </div>
     </div>
 
     <script>
+        // ============================================================================
+        // Data and Configuration
+        // ============================================================================
+        
         const data = {{DATA_JSON}};
         const colors = {{COLORS_JSON}};
         const events = {{EVENTS_JSON}};
-        const canvas = document.getElementById('chart');
-        const ctx = canvas.getContext('2d');
-        const tooltip = document.getElementById('tooltip');
-        
-        // Track visibility of each series
-        const seriesVisible = {};
-        
-        // Track hovered series for highlighting
-        let hoveredSeries = null;
-        
-        // Track logarithmic scale toggle
-        let useLogScale = false;
-        
-        // Track events visibility
-        let showEvents = true;
         
         const minTime = {{MIN_TIME}};
         const maxTime = {{MAX_TIME}};
         const minRtt = {{MIN_RTT}};
         const maxRtt = {{MAX_RTT}};
         
-        // Current visible range (updated dynamically)
-        let currentMinRtt = minRtt;
-        let currentMaxRtt = maxRtt;
+        // ============================================================================
+        // State Management
+        // ============================================================================
         
-        // Increase bottom padding to make room for event timeline
-        const padding = { left: 80, right: 40, top: 60, bottom: 120 };
-        const chartWidth = canvas.width - padding.left - padding.right;
-        const chartHeight = canvas.height - padding.top - padding.bottom - 60; // Reserve 60px for timeline
-        const timelineY = padding.top + chartHeight + 80; // Timeline position
-        const timelineHeight = 40;
+        const state = {
+            seriesVisible: {},
+            hoveredSeries: null,
+            useLogScale: false,
+            showEvents: true,
+            currentMinRtt: minRtt,
+            currentMaxRtt: maxRtt,
+            customColors: {},
+            colorPickerTarget: null
+        };
         
-        // Calculate visible range based on currently visible series
+        // ============================================================================
+        // Canvas and Chart Setup
+        // ============================================================================
+        
+        const canvas = document.getElementById('chart');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const container = document.getElementById('chartContainer');
+        
+        // Responsive canvas sizing
+        function resizeCanvas() {
+            const containerWidth = container.clientWidth;
+            const aspectRatio = 0.5; // height = 50% of width
+            
+            canvas.width = Math.max(containerWidth, 600);
+            canvas.height = Math.max(canvas.width * aspectRatio, 400);
+            
+            drawChart();
+        }
+        
+        // Chart layout constants (recalculated based on canvas size)
+        function getLayout() {
+            const isMobile = canvas.width < 768;
+            return {
+                padding: {
+                    left: isMobile ? 60 : 80,
+                    right: isMobile ? 30 : 40,
+                    top: isMobile ? 50 : 60,
+                    bottom: isMobile ? 100 : 120
+                },
+                timelineHeight: 40,
+                get chartWidth() {
+                    return canvas.width - this.padding.left - this.padding.right;
+                },
+                get chartHeight() {
+                    return canvas.height - this.padding.top - this.padding.bottom - 60;
+                },
+                get timelineY() {
+                    return this.padding.top + this.chartHeight + 80;
+                }
+            };
+        }
+        
+        // ============================================================================
+        // Coordinate Transformations
+        // ============================================================================
+        
+        function timeToX(timestamp) {
+            const layout = getLayout();
+            return layout.padding.left + ((timestamp - minTime) / (maxTime - minTime)) * layout.chartWidth;
+        }
+        
+        function rttToY(rtt) {
+            const layout = getLayout();
+            
+            if (state.useLogScale) {
+                const safeRtt = Math.max(rtt, 0.1);
+                const safeMin = Math.max(state.currentMinRtt, 0.1);
+                const safeMax = Math.max(state.currentMaxRtt, 0.1);
+                
+                const logRtt = Math.log10(safeRtt);
+                const logMin = Math.log10(safeMin);
+                const logMax = Math.log10(safeMax);
+                
+                return layout.padding.top + layout.chartHeight - 
+                    ((logRtt - logMin) / (logMax - logMin)) * layout.chartHeight;
+            } else {
+                return layout.padding.top + layout.chartHeight - 
+                    ((rtt - state.currentMinRtt) / (state.currentMaxRtt - state.currentMinRtt)) * layout.chartHeight;
+            }
+        }
+        
+        // ============================================================================
+        // Utility Functions
+        // ============================================================================
+        
+        function formatTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString();
+        }
+        
         function calculateVisibleRange() {
             let visibleMin = Infinity;
             let visibleMax = -Infinity;
             
             Object.entries(data).forEach(([target, windows]) => {
-                if (!seriesVisible[target]) return;
+                if (!state.seriesVisible[target]) return;
                 windows.forEach(window => {
                     visibleMin = Math.min(visibleMin, window[3]); // min
                     visibleMax = Math.max(visibleMax, window[4]); // max
@@ -215,101 +512,82 @@
                 { min: visibleMin, max: visibleMax };
         }
         
-        function timeToX(timestamp) {
-            return padding.left + ((timestamp - minTime) / (maxTime - minTime)) * chartWidth;
-        }
-        
-        function rttToY(rtt) {
-            if (useLogScale) {
-                // Ensure positive values for log
-                const safeRtt = Math.max(rtt, 0.1);
-                const safeMin = Math.max(currentMinRtt, 0.1);
-                const safeMax = Math.max(currentMaxRtt, 0.1);
-                
-                const logRtt = Math.log10(safeRtt);
-                const logMin = Math.log10(safeMin);
-                const logMax = Math.log10(safeMax);
-                
-                return padding.top + chartHeight - 
-                    ((logRtt - logMin) / (logMax - logMin)) * chartHeight;
-            } else {
-                return padding.top + chartHeight - 
-                    ((rtt - currentMinRtt) / (currentMaxRtt - currentMinRtt)) * chartHeight;
-            }
-        }
-        
-        function formatTime(timestamp) {
-            const date = new Date(timestamp * 1000);
-            return date.toLocaleTimeString();
-        }
-        
-        function drawChart() {
-            // Update visible range based on currently visible series
-            const range = calculateVisibleRange();
-            currentMinRtt = range.min;
-            currentMaxRtt = range.max;
+        function isEventVisible(event) {
+            if (!state.showEvents) return false;
             
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw grid
+            // Check if any series for this target is visible
+            return Object.keys(state.seriesVisible).some(seriesLabel => {
+                return seriesLabel.startsWith(event.target + ' ') && state.seriesVisible[seriesLabel];
+            });
+        }
+        
+        // ============================================================================
+        // Drawing Functions
+        // ============================================================================
+        
+        function drawGrid() {
+            const layout = getLayout();
             ctx.strokeStyle = '#e0e0e0';
             ctx.lineWidth = 1;
             
             // Horizontal grid lines
             for (let i = 0; i <= 5; i++) {
-                const y = padding.top + (chartHeight / 5) * i;
+                const y = layout.padding.top + (layout.chartHeight / 5) * i;
                 ctx.beginPath();
-                ctx.moveTo(padding.left, y);
-                ctx.lineTo(padding.left + chartWidth, y);
+                ctx.moveTo(layout.padding.left, y);
+                ctx.lineTo(layout.padding.left + layout.chartWidth, y);
                 ctx.stroke();
                 
-                // Y axis labels - handle both linear and log scale
+                // Y axis labels
                 let rtt;
-                if (useLogScale) {
-                    const safeMin = Math.max(currentMinRtt, 0.1);
-                    const safeMax = Math.max(currentMaxRtt, 0.1);
+                if (state.useLogScale) {
+                    const safeMin = Math.max(state.currentMinRtt, 0.1);
+                    const safeMax = Math.max(state.currentMaxRtt, 0.1);
                     const logMin = Math.log10(safeMin);
                     const logMax = Math.log10(safeMax);
                     const logValue = logMax - (logMax - logMin) / 5 * i;
                     rtt = Math.pow(10, logValue);
                 } else {
-                    rtt = currentMaxRtt - (currentMaxRtt - currentMinRtt) / 5 * i;
+                    rtt = state.currentMaxRtt - (state.currentMaxRtt - state.currentMinRtt) / 5 * i;
                 }
+                
                 ctx.fillStyle = '#666';
-                ctx.font = '14px sans-serif';
+                ctx.font = `${canvas.width < 768 ? 11 : 14}px sans-serif`;
                 ctx.textAlign = 'right';
-                ctx.fillText(rtt.toFixed(1) + 'ms', padding.left - 10, y + 5);
+                ctx.fillText(rtt.toFixed(1) + 'ms', layout.padding.left - 10, y + 5);
             }
             
             // Vertical grid lines
             for (let i = 0; i <= 6; i++) {
-                const x = padding.left + (chartWidth / 6) * i;
+                const x = layout.padding.left + (layout.chartWidth / 6) * i;
                 ctx.beginPath();
-                ctx.moveTo(x, padding.top);
-                ctx.lineTo(x, padding.top + chartHeight);
+                ctx.moveTo(x, layout.padding.top);
+                ctx.lineTo(x, layout.padding.top + layout.chartHeight);
                 ctx.stroke();
                 
                 // X axis labels
                 const timestamp = minTime + (maxTime - minTime) / 6 * i;
                 ctx.fillStyle = '#666';
-                ctx.font = '14px sans-serif';
+                ctx.font = `${canvas.width < 768 ? 11 : 14}px sans-serif`;
                 ctx.textAlign = 'center';
-                ctx.fillText(formatTime(timestamp), x, padding.top + chartHeight + 25);
+                ctx.fillText(formatTime(timestamp), x, layout.padding.top + layout.chartHeight + 25);
             }
-            
-            // Axes
+        }
+        
+        function drawAxes() {
+            const layout = getLayout();
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(padding.left, padding.top);
-            ctx.lineTo(padding.left, padding.top + chartHeight);
-            ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+            ctx.moveTo(layout.padding.left, layout.padding.top);
+            ctx.lineTo(layout.padding.left, layout.padding.top + layout.chartHeight);
+            ctx.lineTo(layout.padding.left + layout.chartWidth, layout.padding.top + layout.chartHeight);
             ctx.stroke();
             
             // Axis labels
+            const fontSize = canvas.width < 768 ? 14 : 18;
             ctx.fillStyle = '#333';
-            ctx.font = 'bold 18px sans-serif';
+            ctx.font = `bold ${fontSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillText('Time', canvas.width / 2, canvas.height - 10);
             
@@ -318,319 +596,269 @@
             ctx.rotate(-Math.PI / 2);
             ctx.fillText('Latency (ms)', 0, 0);
             ctx.restore();
-            
-            // Draw data lines (breaking at gaps > 5 minutes)
-            // Data format: [window_start, window_end, count, min, max, avg, p95, p99]
-            const MAX_GAP_SECONDS = 300;  // 5 minutes
-            
-            // Separate hovered series to draw it last (on top)
-            const entries = Object.entries(data);
-            const hoveredEntry = entries.find(([target]) => target === hoveredSeries);
-            const otherEntries = entries.filter(([target]) => target !== hoveredSeries);
-            
-            // Draw non-hovered series first
-            const drawSeries = (target, windows, idx) => {
-                // Skip hidden series
-                if (!seriesVisible[target]) {
-                    return;
-                }
-                
-                // Determine line style based on target label
-                let lineWidth = 2;
-                let dashPattern = [];
-                let alphaMultiplier = 1.0;
-                
-                if (target.includes('↑ Upload')) {
-                    // Upload: dashed line, thinner, lighter
-                    dashPattern = [8, 4];
-                    lineWidth = 2;
-                    alphaMultiplier = 0.8;
-                } else if (target.includes('↓ Download')) {
-                    // Download: dotted line, thinner, medium
-                    dashPattern = [2, 3];
-                    lineWidth = 2;
-                    alphaMultiplier = 0.9;
-                } else if (target.includes('RTT')) {
-                    // RTT: solid line, thicker, full color
-                    dashPattern = [];
-                    lineWidth = 3;
-                    alphaMultiplier = 1.0;
-                } else {
-                    // ICMP: solid line, medium
-                    dashPattern = [];
-                    lineWidth = 2;
-                    alphaMultiplier = 1.0;
-                }
-                
-                // Split windows into continuous segments (no gaps > 5 min)
-                const segments = [];
-                let currentSegment = [];
-                
-                windows.forEach((window, i) => {
-                    if (i === 0) {
-                        currentSegment.push(window);
-                    } else {
-                        const prevTime = windows[i - 1][1];  // prev window end
-                        const currTime = window[0];  // curr window start
-                        const gap = currTime - prevTime;
-                        
-                        if (gap > MAX_GAP_SECONDS) {
-                            // Gap detected - save current segment and start new one
-                            if (currentSegment.length > 0) {
-                                segments.push(currentSegment);
-                            }
-                            currentSegment = [window];
-                        } else {
-                            currentSegment.push(window);
-                        }
-                    }
-                });
-                
-                // Don't forget the last segment
-                if (currentSegment.length > 0) {
-                    segments.push(currentSegment);
-                }
-                
-                // Draw each segment separately
-                segments.forEach(segment => {
-                    // Draw shaded area between min and max
-                    ctx.fillStyle = colors[idx];
-                    ctx.globalAlpha = 0.1;
-                    ctx.beginPath();
-                    
-                    // Draw min line (bottom of shaded area)
-                    segment.forEach((window, i) => {
-                        const window_center = (window[0] + window[1]) / 2;
-                        const min = window[3];
-                        const x = timeToX(window_center);
-                        const y = rttToY(min);
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    });
-                    
-                    // Draw max line in reverse (top of shaded area)
-                    for (let i = segment.length - 1; i >= 0; i--) {
-                        const window = segment[i];
-                        const window_center = (window[0] + window[1]) / 2;
-                        const max = window[4];
-                        const x = timeToX(window_center);
-                        const y = rttToY(max);
-                        ctx.lineTo(x, y);
-                    }
-                    
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.globalAlpha = 1.0;
-                    
-                    // Check if this series is hovered for highlighting
-                    const isHovered = hoveredSeries === target;
-                    const minMaxLineWidth = isHovered ? 2.5 : 1;
-                    const minMaxAlpha = isHovered ? 0.6 : 0.3;
-                    
-                    // Draw min line (thin, lighter color)
-                    ctx.strokeStyle = colors[idx];
-                    ctx.globalAlpha = minMaxAlpha * alphaMultiplier;
-                    ctx.lineWidth = minMaxLineWidth;
-                    ctx.setLineDash(dashPattern);
-                    ctx.beginPath();
-                    segment.forEach((window, i) => {
-                        const window_center = (window[0] + window[1]) / 2;
-                        const min = window[3];
-                        const x = timeToX(window_center);
-                        const y = rttToY(min);
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    });
-                    ctx.stroke();
-                    
-                    // Draw max line (thin, lighter color)
-                    ctx.setLineDash(dashPattern);
-                    ctx.beginPath();
-                    segment.forEach((window, i) => {
-                        const window_center = (window[0] + window[1]) / 2;
-                        const max = window[4];
-                        const x = timeToX(window_center);
-                        const y = rttToY(max);
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    });
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    ctx.globalAlpha = 1.0;
-                    
-                    // Draw avg line (bold, primary)
-                    ctx.strokeStyle = colors[idx];
-                    ctx.globalAlpha = alphaMultiplier;
-                    ctx.lineWidth = lineWidth;
-                    ctx.setLineDash(dashPattern);
-                    ctx.beginPath();
-                    segment.forEach((window, i) => {
-                        const window_center = (window[0] + window[1]) / 2;
-                        const avg = window[5];
-                        const x = timeToX(window_center);
-                        const y = rttToY(avg);
-                        if (i === 0) ctx.moveTo(x, y);
-                        else ctx.lineTo(x, y);
-                    });
-                    ctx.stroke();
-                    ctx.setLineDash([]);  // Reset dash pattern
-                    ctx.globalAlpha = 1.0;  // Reset alpha
-                });
-            };
-            
-            // Draw all non-hovered series first
-            otherEntries.forEach(([target, windows], idx) => {
-                drawSeries(target, windows, idx);
-            });
-            
-            // Draw hovered series last (on top) if it exists
-            if (hoveredEntry) {
-                const [target, windows] = hoveredEntry;
-                const idx = entries.findIndex(([t]) => t === target);
-                drawSeries(target, windows, idx);
-            }
-            
-            // Draw event markers on chart
-            drawEventMarkers();
-            
-            // Draw event timeline
-            drawEventTimeline();
         }
         
-        // Draw event markers on the main chart
-        function drawEventMarkers() {
-            // Filter events based on visibility settings
-            const visibleEvents = events.filter(event => {
-                // Check if events are globally shown
-                if (!showEvents) return false;
-                
-                // Check if any series for this target is visible
-                // Event target is like "8.8.8.8", series labels are like "8.8.8.8 ICMP"
-                // Show event if ANY series starting with this target is visible
-                const hasVisibleSeries = Object.keys(seriesVisible).some(seriesLabel => {
-                    return seriesLabel.startsWith(event.target + ' ') && seriesVisible[seriesLabel];
-                });
-                
-                return hasVisibleSeries;
+        function drawSeries(target, windows, colorIndex) {
+            if (!state.seriesVisible[target]) return;
+            
+            const layout = getLayout();
+            const MAX_GAP_SECONDS = 300;
+            
+            // Get color (custom or default)
+            const seriesColor = state.customColors[target] || colors[colorIndex];
+            
+            // Determine line style
+            let lineWidth = 2;
+            let dashPattern = [];
+            let alphaMultiplier = 1.0;
+            
+            if (target.includes('↑ Upload')) {
+                dashPattern = [8, 4];
+                lineWidth = 2;
+                alphaMultiplier = 0.8;
+            } else if (target.includes('↓ Download')) {
+                dashPattern = [2, 3];
+                lineWidth = 2;
+                alphaMultiplier = 0.9;
+            } else if (target.includes('RTT')) {
+                dashPattern = [];
+                lineWidth = 3;
+                alphaMultiplier = 1.0;
+            } else {
+                dashPattern = [];
+                lineWidth = 2;
+                alphaMultiplier = 1.0;
+            }
+            
+            // Split into segments
+            const segments = [];
+            let currentSegment = [];
+            
+            windows.forEach((window, i) => {
+                if (i === 0) {
+                    currentSegment.push(window);
+                } else {
+                    const prevTime = windows[i - 1][1];
+                    const currTime = window[0];
+                    const gap = currTime - prevTime;
+                    
+                    if (gap > MAX_GAP_SECONDS) {
+                        if (currentSegment.length > 0) {
+                            segments.push(currentSegment);
+                        }
+                        currentSegment = [window];
+                    } else {
+                        currentSegment.push(window);
+                    }
+                }
             });
             
-            visibleEvents.forEach(event => {
-                const x = timeToX(event.timestamp);
+            if (currentSegment.length > 0) {
+                segments.push(currentSegment);
+            }
+            
+            const isHovered = state.hoveredSeries === target;
+            const minMaxLineWidth = isHovered ? 2.5 : 1;
+            const minMaxAlpha = isHovered ? 0.6 : 0.3;
+            
+            // Draw each segment
+            segments.forEach(segment => {
+                // Shaded area between min and max
+                ctx.fillStyle = seriesColor;
+                ctx.globalAlpha = 0.1;
+                ctx.beginPath();
                 
-                // Determine color based on event type
-                let color;
-                if (event.type === 'high_latency') {
-                    color = '#FFA500'; // Orange
-                } else if (event.type === 'packet_loss') {
-                    color = '#FF0000'; // Red
-                } else if (event.type === 'error') {
-                    color = '#8B0000'; // Dark red
-                } else {
-                    color = '#888888'; // Gray
+                segment.forEach((window, i) => {
+                    const x = timeToX((window[0] + window[1]) / 2);
+                    const y = rttToY(window[3]); // min
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                
+                for (let i = segment.length - 1; i >= 0; i--) {
+                    const window = segment[i];
+                    const x = timeToX((window[0] + window[1]) / 2);
+                    const y = rttToY(window[4]); // max
+                    ctx.lineTo(x, y);
                 }
                 
-                // Draw triangle marker at top of chart
-                ctx.fillStyle = color;
-                ctx.globalAlpha = 0.8;
-                ctx.beginPath();
-                ctx.moveTo(x, padding.top - 15);
-                ctx.lineTo(x - 5, padding.top - 5);
-                ctx.lineTo(x + 5, padding.top - 5);
                 ctx.closePath();
                 ctx.fill();
                 ctx.globalAlpha = 1.0;
                 
-                // Draw vertical dashed line
-                ctx.strokeStyle = color;
-                ctx.globalAlpha = 0.3;
-                ctx.lineWidth = 1;
-                ctx.setLineDash([4, 4]);
+                // Min line
+                ctx.strokeStyle = seriesColor;
+                ctx.globalAlpha = minMaxAlpha * alphaMultiplier;
+                ctx.lineWidth = minMaxLineWidth;
+                ctx.setLineDash(dashPattern);
                 ctx.beginPath();
-                ctx.moveTo(x, padding.top);
-                ctx.lineTo(x, padding.top + chartHeight);
+                segment.forEach((window, i) => {
+                    const x = timeToX((window[0] + window[1]) / 2);
+                    const y = rttToY(window[3]);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+                
+                // Max line
+                ctx.beginPath();
+                segment.forEach((window, i) => {
+                    const x = timeToX((window[0] + window[1]) / 2);
+                    const y = rttToY(window[4]);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.globalAlpha = 1.0;
+                
+                // Avg line (bold)
+                ctx.strokeStyle = seriesColor;
+                ctx.globalAlpha = alphaMultiplier;
+                ctx.lineWidth = lineWidth;
+                ctx.setLineDash(dashPattern);
+                ctx.beginPath();
+                segment.forEach((window, i) => {
+                    const x = timeToX((window[0] + window[1]) / 2);
+                    const y = rttToY(window[5]); // avg
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
                 ctx.stroke();
                 ctx.setLineDash([]);
                 ctx.globalAlpha = 1.0;
             });
         }
         
-        // Draw event timeline at bottom
-        function drawEventTimeline() {
-            // Draw timeline background
-            ctx.fillStyle = '#f0f0f0';
-            ctx.fillRect(padding.left, timelineY, chartWidth, timelineHeight);
+        function drawEventMarkers() {
+            const layout = getLayout();
+            const visibleEvents = events.filter(isEventVisible);
             
-            // Draw timeline border
-            ctx.strokeStyle = '#999';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(padding.left, timelineY, chartWidth, timelineHeight);
-            
-            // Draw label
-            ctx.fillStyle = '#333';
-            ctx.font = 'bold 14px sans-serif';
-            ctx.textAlign = 'right';
-            ctx.fillText('Events:', padding.left - 10, timelineY + 25);
-            
-            // Filter events based on visibility settings
-            const visibleEvents = events.filter(event => {
-                // Check if events are globally shown
-                if (!showEvents) return false;
-                
-                // Check if any series for this target is visible
-                const hasVisibleSeries = Object.keys(seriesVisible).some(seriesLabel => {
-                    return seriesLabel.startsWith(event.target + ' ') && seriesVisible[seriesLabel];
-                });
-                
-                return hasVisibleSeries;
-            });
-            
-            // Draw events as colored bars
             visibleEvents.forEach(event => {
                 const x = timeToX(event.timestamp);
                 
-                // Determine color
                 let color;
-                if (event.type === 'high_latency') {
-                    color = '#FFA500';
-                } else if (event.type === 'packet_loss') {
-                    color = '#FF0000';
-                } else if (event.type === 'error') {
-                    color = '#8B0000';
-                } else {
-                    color = '#888888';
-                }
+                if (event.type === 'high_latency') color = '#FFA500';
+                else if (event.type === 'packet_loss') color = '#FF0000';
+                else if (event.type === 'error') color = '#8B0000';
+                else color = '#888888';
                 
-                // Draw event bar
+                // Triangle marker
                 ctx.fillStyle = color;
-                ctx.globalAlpha = 0.7;
-                ctx.fillRect(x - 2, timelineY + 5, 4, timelineHeight - 10);
+                ctx.globalAlpha = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(x, layout.padding.top - 15);
+                ctx.lineTo(x - 5, layout.padding.top - 5);
+                ctx.lineTo(x + 5, layout.padding.top - 5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                
+                // Vertical dashed line
+                ctx.strokeStyle = color;
+                ctx.globalAlpha = 0.3;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(x, layout.padding.top);
+                ctx.lineTo(x, layout.padding.top + layout.chartHeight);
+                ctx.stroke();
+                ctx.setLineDash([]);
                 ctx.globalAlpha = 1.0;
             });
         }
         
-        // Handle mouse move for tooltips
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+        function drawEventTimeline() {
+            const layout = getLayout();
+            const visibleEvents = events.filter(isEventVisible);
             
-            // Find closest window
+            // Background
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(layout.padding.left, layout.timelineY, layout.chartWidth, layout.timelineHeight);
+            
+            // Border
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(layout.padding.left, layout.timelineY, layout.chartWidth, layout.timelineHeight);
+            
+            // Label
+            ctx.fillStyle = '#333';
+            ctx.font = `bold ${canvas.width < 768 ? 11 : 14}px sans-serif`;
+            ctx.textAlign = 'right';
+            ctx.fillText('Events:', layout.padding.left - 10, layout.timelineY + 25);
+            
+            // Event bars
+            visibleEvents.forEach(event => {
+                const x = timeToX(event.timestamp);
+                
+                let color;
+                if (event.type === 'high_latency') color = '#FFA500';
+                else if (event.type === 'packet_loss') color = '#FF0000';
+                else if (event.type === 'error') color = '#8B0000';
+                else color = '#888888';
+                
+                ctx.fillStyle = color;
+                ctx.globalAlpha = 0.7;
+                ctx.fillRect(x - 2, layout.timelineY + 5, 4, layout.timelineHeight - 10);
+                ctx.globalAlpha = 1.0;
+            });
+        }
+        
+        function drawChart() {
+            // Update visible range
+            const range = calculateVisibleRange();
+            state.currentMinRtt = range.min;
+            state.currentMaxRtt = range.max;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw components
+            drawGrid();
+            drawAxes();
+            
+            // Draw series (non-hovered first, then hovered on top)
+            const entries = Object.entries(data);
+            const hoveredEntry = entries.find(([target]) => target === state.hoveredSeries);
+            const otherEntries = entries.filter(([target]) => target !== state.hoveredSeries);
+            
+            otherEntries.forEach(([target, windows], idx) => {
+                const colorIndex = entries.findIndex(([t]) => t === target);
+                drawSeries(target, windows, colorIndex);
+            });
+            
+            if (hoveredEntry) {
+                const [target, windows] = hoveredEntry;
+                const colorIndex = entries.findIndex(([t]) => t === target);
+                drawSeries(target, windows, colorIndex);
+            }
+            
+            drawEventMarkers();
+            drawEventTimeline();
+        }
+        
+        // ============================================================================
+        // Interaction Handlers
+        // ============================================================================
+        
+        function handleMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseY = (e.clientY - rect.top) * scaleY;
+            
+            // Find closest measurement
             let closestDist = Infinity;
             let closestWindow = null;
             let closestTarget = null;
             
             Object.entries(data).forEach(([target, windows]) => {
-                // Skip hidden series in tooltip search
-                if (!seriesVisible[target]) {
-                    return;
-                }
+                if (!state.seriesVisible[target]) return;
                 
                 windows.forEach(window => {
-                    // window format: [start, end, count, min, max, avg, p95, p99]
-                    const window_center = (window[0] + window[1]) / 2;
-                    const avg = window[5];
-                    const x = timeToX(window_center);
-                    const y = rttToY(avg);
+                    const x = timeToX((window[0] + window[1]) / 2);
+                    const y = rttToY(window[5]); // avg
                     const dist = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
                     
                     if (dist < closestDist && dist < 30) {
@@ -641,207 +869,249 @@
                 });
             });
             
-            // Also check for nearby events (only visible ones)
-            let nearbyEvents = [];
-            events.forEach(event => {
-                // Only check visible events
-                if (!showEvents) {
-                    return;
-                }
-                
-                // Check if any series for this target is visible
-                const hasVisibleSeries = Object.keys(seriesVisible).some(seriesLabel => {
-                    return seriesLabel.startsWith(event.target + ' ') && seriesVisible[seriesLabel];
-                });
-                
-                if (!hasVisibleSeries) {
-                    return;
-                }
-                
+            // Find nearby events
+            const nearbyEvents = events.filter(event => {
+                if (!isEventVisible(event)) return false;
                 const eventX = timeToX(event.timestamp);
-                const dist = Math.abs(mouseX - eventX);
-                if (dist < 15) {
-                    nearbyEvents.push(event);
-                }
+                return Math.abs(mouseX - eventX) < 15;
             });
             
+            // Show tooltip
             if (closestWindow || nearbyEvents.length > 0) {
-                let tooltipHtml = '';
+                let html = '';
                 
-                // Show measurement data if available
                 if (closestWindow) {
                     const [start, end, count, min, max, avg, p95, p99] = closestWindow;
-                    const start_time = formatTime(start);
-                    const end_time = formatTime(end);
-                    const variance = max - min;
-                    
-                    tooltipHtml += `
+                    html += `
                         <strong>${closestTarget}</strong><br>
-                        Time: ${start_time} - ${end_time}<br>
+                        Time: ${formatTime(start)} - ${formatTime(end)}<br>
                         Samples: ${count}<br>
                         <hr style="margin: 8px 0; border: none; border-top: 1px solid rgba(255,255,255,0.3)">
                         <strong>Min:</strong> ${min.toFixed(2)}ms<br>
                         <strong>Max:</strong> ${max.toFixed(2)}ms<br>
                         <strong>Avg:</strong> ${avg.toFixed(2)}ms<br>
                         <strong>P95:</strong> ${p95.toFixed(2)}ms<br>
-                        <strong>P99:</strong> ${p99.toFixed(2)}ms<br>
-                        <strong>Variance:</strong> ${variance.toFixed(2)}ms
+                        <strong>P99:</strong> ${p99.toFixed(2)}ms
                     `;
                 }
                 
-                // Show nearby events
                 if (nearbyEvents.length > 0) {
-                    if (closestWindow) {
-                        tooltipHtml += '<hr style="margin: 8px 0; border: none; border-top: 1px solid rgba(255,255,255,0.3)">';
-                    }
-                    tooltipHtml += '<strong style="color: #FFA500;">⚠️ Alerts:</strong><br>';
+                    if (closestWindow) html += '<hr style="margin: 8px 0; border: none; border-top: 1px solid rgba(255,255,255,0.3)">';
+                    html += '<strong style="color: #FFA500;">⚠️ Alerts:</strong><br>';
                     nearbyEvents.forEach(event => {
-                        const eventTime = formatTime(event.timestamp);
                         const icon = event.type === 'high_latency' ? '⏱️' : 
                                     event.type === 'packet_loss' ? '📉' : '❌';
-                        tooltipHtml += `${icon} ${eventTime}: ${event.message}<br>`;
+                        html += `${icon} ${formatTime(event.timestamp)}: ${event.message}<br>`;
                     });
                 }
                 
-                tooltip.innerHTML = tooltipHtml;
+                tooltip.innerHTML = html;
                 tooltip.style.display = 'block';
                 tooltip.style.left = (e.clientX + 15) + 'px';
                 tooltip.style.top = (e.clientY - 15) + 'px';
             } else {
                 tooltip.style.display = 'none';
             }
-        });
+        }
         
-        canvas.addEventListener('mouseleave', () => {
-            tooltip.style.display = 'none';
-        });
+        function toggleSeries(target) {
+            state.seriesVisible[target] = !state.seriesVisible[target];
+            
+            // Update UI
+            const legendItem = document.querySelector(`.legend-item[data-target="${target}"]`);
+            const statCard = document.querySelector(`.stat-card[data-target="${target}"]`);
+            
+            if (legendItem) legendItem.classList.toggle('disabled', !state.seriesVisible[target]);
+            if (statCard) statCard.classList.toggle('disabled', !state.seriesVisible[target]);
+            
+            drawChart();
+        }
         
-        // Create legend with interactivity
-        const legendEl = document.getElementById('legend');
-        Object.keys(data).forEach((target, idx) => {
-            // Initialize visibility (all visible by default)
-            seriesVisible[target] = true;
+        function setHoveredSeries(target) {
+            state.hoveredSeries = target;
+            drawChart();
+        }
+        
+        // ============================================================================
+        // Color Picker Functions
+        // ============================================================================
+        
+        function openColorPicker(target, colorIndex, event) {
+            event.stopPropagation();
             
-            const item = document.createElement('div');
-            item.className = 'legend-item';
-            item.dataset.target = target;
-            item.innerHTML = `
-                <div class="legend-color" style="background: ${colors[idx]}"></div>
-                <span>${target}</span>
-            `;
+            state.colorPickerTarget = target;
             
-            // Click to toggle visibility
-            item.addEventListener('click', () => {
-                seriesVisible[target] = !seriesVisible[target];
-                item.classList.toggle('disabled', !seriesVisible[target]);
-                
-                // Also update the corresponding stat card
-                const statCard = document.querySelector(`.stat-card[data-target="${target}"]`);
-                if (statCard) {
-                    statCard.classList.toggle('disabled', !seriesVisible[target]);
+            const overlay = document.getElementById('colorPickerOverlay');
+            const container = document.getElementById('colorPickerContainer');
+            const input = document.getElementById('colorPickerInput');
+            const title = document.getElementById('colorPickerTitle');
+            
+            // Get current color (custom or default)
+            const currentColor = state.customColors[target] || colors[colorIndex];
+            input.value = currentColor;
+            
+            title.textContent = `Choose Color for ${target}`;
+            
+            // Position near the clicked element
+            const rect = event.target.getBoundingClientRect();
+            container.style.left = Math.min(rect.left, window.innerWidth - 250) + 'px';
+            container.style.top = Math.min(rect.bottom + 10, window.innerHeight - 200) + 'px';
+            
+            overlay.style.display = 'block';
+            container.style.display = 'block';
+        }
+        
+        function updateSeriesColor(target, newColor) {
+            state.customColors[target] = newColor;
+            
+            // Update legend color bar
+            const legendItem = document.querySelector(`.legend-item[data-target="${target}"]`);
+            if (legendItem) {
+                const colorBar = legendItem.querySelector('.legend-color');
+                if (colorBar) {
+                    colorBar.style.background = newColor;
                 }
-                
-                drawChart();  // Redraw without the hidden series
-            });
+            }
             
-            // Hover to highlight (optional visual feedback)
-            item.addEventListener('mouseenter', () => {
-                hoveredSeries = target;
-                if (seriesVisible[target]) {
-                    item.style.fontWeight = 'bold';
-                }
-                drawChart();
-            });
-            
-            item.addEventListener('mouseleave', () => {
-                hoveredSeries = null;
-                item.style.fontWeight = 'normal';
-                drawChart();
-            });
-            
-            legendEl.appendChild(item);
-        });
+            drawChart();
+        }
         
-        // Create stats (overall statistics across all windows)
-        const statsEl = document.getElementById('stats');
-        Object.entries(data).forEach(([target, windows]) => {
-            // Aggregate stats across all windows
-            let overall_min = Infinity;
-            let overall_max = -Infinity;
-            let sum_avg = 0;
-            let sum_p95 = 0;
-            let sum_p99 = 0;
-            let total_count = 0;
+        function closeColorPicker() {
+            const overlay = document.getElementById('colorPickerOverlay');
+            const container = document.getElementById('colorPickerContainer');
             
-            windows.forEach(window => {
-                // window format: [start, end, count, min, max, avg, p95, p99]
-                overall_min = Math.min(overall_min, window[3]);
-                overall_max = Math.max(overall_max, window[4]);
-                sum_avg += window[5] * window[2];  // weighted by count
-                sum_p95 += window[6] * window[2];
-                sum_p99 += window[7] * window[2];
-                total_count += window[2];
-            });
-            
-            const overall_avg = sum_avg / total_count;
-            const overall_p95 = sum_p95 / total_count;
-            const overall_p99 = sum_p99 / total_count;
-            
-            const card = document.createElement('div');
-            card.className = 'stat-card';
-            card.dataset.target = target;
-            card.innerHTML = `
-                <div class="stat-label">${target} (${windows.length} windows, ${total_count} samples)</div>
-                <div class="stat-value">${overall_avg.toFixed(2)}ms</div>
-                <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                    Min: ${overall_min.toFixed(2)}ms | Max: ${overall_max.toFixed(2)}ms<br>
-                    P95: ${overall_p95.toFixed(2)}ms | P99: ${overall_p99.toFixed(2)}ms
-                </div>
-            `;
-            
-            // Click to toggle visibility
-            card.addEventListener('click', () => {
-                seriesVisible[target] = !seriesVisible[target];
-                card.classList.toggle('disabled', !seriesVisible[target]);
-                
-                // Also update the corresponding legend item
-                const legendItem = document.querySelector(`.legend-item[data-target="${target}"]`);
-                if (legendItem) {
-                    legendItem.classList.toggle('disabled', !seriesVisible[target]);
-                }
-                
-                drawChart();  // Redraw
-            });
-            
-            // Hover to highlight min/max lines
-            card.addEventListener('mouseenter', () => {
-                hoveredSeries = target;
-                drawChart();
-            });
-            
-            card.addEventListener('mouseleave', () => {
-                hoveredSeries = null;
-                drawChart();
-            });
-            
-            statsEl.appendChild(card);
-        });
+            overlay.style.display = 'none';
+            container.style.display = 'none';
+            state.colorPickerTarget = null;
+        }
         
-        // Log scale toggle event listener
+        // ============================================================================
+        // UI Initialization
+        // ============================================================================
+        
+        function initializeLegend() {
+            const legendEl = document.getElementById('legend');
+            
+            Object.keys(data).forEach((target, idx) => {
+                state.seriesVisible[target] = true;
+                
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.dataset.target = target;
+                
+                const colorBar = document.createElement('div');
+                colorBar.className = 'legend-color';
+                colorBar.style.background = colors[idx];
+                
+                const label = document.createElement('span');
+                label.textContent = target;
+                
+                item.appendChild(colorBar);
+                item.appendChild(label);
+                
+                // Color bar click opens color picker
+                colorBar.addEventListener('click', (e) => openColorPicker(target, idx, e));
+                
+                // Label click toggles series visibility
+                label.addEventListener('click', () => toggleSeries(target));
+                
+                // Hover effects
+                item.addEventListener('mouseenter', () => setHoveredSeries(target));
+                item.addEventListener('mouseleave', () => setHoveredSeries(null));
+                
+                legendEl.appendChild(item);
+            });
+        }
+        
+        function initializeStats() {
+            const statsEl = document.getElementById('stats');
+            
+            Object.entries(data).forEach(([target, windows]) => {
+                let overall_min = Infinity;
+                let overall_max = -Infinity;
+                let sum_avg = 0;
+                let sum_p95 = 0;
+                let sum_p99 = 0;
+                let total_count = 0;
+                
+                windows.forEach(window => {
+                    overall_min = Math.min(overall_min, window[3]);
+                    overall_max = Math.max(overall_max, window[4]);
+                    sum_avg += window[5] * window[2];
+                    sum_p95 += window[6] * window[2];
+                    sum_p99 += window[7] * window[2];
+                    total_count += window[2];
+                });
+                
+                const overall_avg = sum_avg / total_count;
+                const overall_p95 = sum_p95 / total_count;
+                const overall_p99 = sum_p99 / total_count;
+                
+                const card = document.createElement('div');
+                card.className = 'stat-card';
+                card.dataset.target = target;
+                card.innerHTML = `
+                    <div class="stat-label">${target} (${windows.length} windows, ${total_count} samples)</div>
+                    <div class="stat-value">${overall_avg.toFixed(2)}ms</div>
+                    <div class="stat-details">
+                        Min: ${overall_min.toFixed(2)}ms | Max: ${overall_max.toFixed(2)}ms<br>
+                        P95: ${overall_p95.toFixed(2)}ms | P99: ${overall_p99.toFixed(2)}ms
+                    </div>
+                `;
+                
+                card.addEventListener('click', () => toggleSeries(target));
+                card.addEventListener('mouseenter', () => setHoveredSeries(target));
+                card.addEventListener('mouseleave', () => setHoveredSeries(null));
+                
+                statsEl.appendChild(card);
+            });
+        }
+        
+        // ============================================================================
+        // Event Listeners
+        // ============================================================================
+        
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+        
         document.getElementById('logScaleToggle').addEventListener('change', (e) => {
-            useLogScale = e.target.checked;
+            state.useLogScale = e.target.checked;
             drawChart();
         });
         
-        // Show events toggle event listener
         document.getElementById('showEventsToggle').addEventListener('change', (e) => {
-            showEvents = e.target.checked;
+            state.showEvents = e.target.checked;
             drawChart();
         });
         
-        // Initial draw
-        drawChart();
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+        
+        // Color picker event listeners
+        document.getElementById('colorPickerApply').addEventListener('click', () => {
+            const input = document.getElementById('colorPickerInput');
+            if (state.colorPickerTarget) {
+                updateSeriesColor(state.colorPickerTarget, input.value);
+            }
+            closeColorPicker();
+        });
+        
+        document.getElementById('colorPickerCancel').addEventListener('click', () => {
+            closeColorPicker();
+        });
+        
+        document.getElementById('colorPickerOverlay').addEventListener('click', () => {
+            closeColorPicker();
+        });
+        
+        // ============================================================================
+        // Initialization
+        // ============================================================================
+        
+        initializeLegend();
+        initializeStats();
+        resizeCanvas();
     </script>
 </body>
 </html>
-
